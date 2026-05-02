@@ -1,55 +1,66 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>ColorCode</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      background: #111;
-      color: white;
-    }
+<meta charset="UTF-8">
+<title>ColorCode Scanner</title>
 
-    h1 {
-      margin-top: 20px;
-    }
+<style>
+body {
+  background: #111;
+  color: white;
+  font-family: Arial;
+  text-align: center;
+}
 
-    #canvas {
-      margin-top: 20px;
-      border: 2px solid white;
-    }
+canvas, video {
+  border: 2px solid white;
+  margin-top: 10px;
+}
 
-    input {
-      padding: 10px;
-      font-size: 18px;
-      margin-top: 20px;
-    }
-
-    button {
-      padding: 10px 20px;
-      font-size: 16px;
-      margin: 10px;
-      cursor: pointer;
-    }
-  </style>
+button, input {
+  padding: 10px;
+  margin: 5px;
+  font-size: 16px;
+}
+</style>
 </head>
+
 <body>
 
-<h1>🎨 ColorCode Generator</h1>
+<h1>🎨 ColorCode</h1>
 
-<input id="inputText" placeholder="Ingresa números (0-9)" />
-<br>
-<button onclick="generar()">Generar</button>
-<button onclick="decodificar()">Decodificar</button>
+<button onclick="modo='generar'">Generar</button>
+<button onclick="modo='scan'; iniciarCamara()">Escanear</button>
 
 <br>
+
+<input id="inputText" placeholder="12345" />
+
+<br>
+<button onclick="generar()">Generar código</button>
+
+<br>
+
 <canvas id="canvas" width="800" height="100"></canvas>
+
+<br>
+
+<video id="video" width="400" height="200" autoplay></video>
 
 <p id="output"></p>
 
 <script>
+let modo = "generar";
+
 const colores = {
+  rojo: [255,0,0],
+  verde: [0,255,0],
+  azul: [0,0,255],
+  negro: [0,0,0],
+  blanco: [255,255,255]
+};
+
+const coloresHex = {
   rojo: "#ff0000",
   verde: "#00ff00",
   azul: "#0000ff",
@@ -57,7 +68,6 @@ const colores = {
   blanco: "#ffffff"
 };
 
-// Diccionario (pares de colores)
 const diccionario = {
   "negro-blanco": "0",
   "negro-rojo": "1",
@@ -71,78 +81,138 @@ const diccionario = {
   "verde-azul": "9"
 };
 
-// Invertido
-const diccionarioInv = {};
-for (let key in diccionario) {
-  diccionarioInv[diccionario[key]] = key;
-}
+const dicInv = {};
+for (let k in diccionario) dicInv[diccionario[k]] = k;
 
-// Patrones especiales
-const START = ["blanco", "rojo", "blanco"];
-const END = ["verde", "negro", "verde"];
+const START = ["blanco","rojo","blanco"];
+const END = ["verde","negro","verde"];
 
+// ---------------- GENERADOR ----------------
 function generar() {
   const texto = document.getElementById("inputText").value;
   const canvas = document.getElementById("canvas");
   const ctx = canvas.getContext("2d");
 
-  let secuencia = [...START];
+  let seq = [...START];
 
-  for (let char of texto) {
-    if (!diccionarioInv[char]) continue;
-    let [c1, c2] = diccionarioInv[char].split("-");
-    secuencia.push(c1, c2);
+  for (let c of texto) {
+    if (!dicInv[c]) continue;
+    let [a,b] = dicInv[c].split("-");
+    seq.push(a,b);
   }
 
-  secuencia.push(...END);
+  seq.push(...END);
 
-  const ancho = 20;
+  const w = 20;
 
-  for (let i = 0; i < secuencia.length; i++) {
-    ctx.fillStyle = colores[secuencia[i]];
-    ctx.fillRect(i * ancho, 0, ancho, canvas.height);
+  for (let i=0;i<seq.length;i++){
+    ctx.fillStyle = coloresHex[seq[i]];
+    ctx.fillRect(i*w,0,w,canvas.height);
   }
 }
 
-function decodificar() {
-  const canvas = document.getElementById("canvas");
-  const ctx = canvas.getContext("2d");
+// ---------------- CAMARA ----------------
+async function iniciarCamara(){
+  const video = document.getElementById("video");
 
-  const ancho = 20;
-  const cantidad = canvas.width / ancho;
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: "environment" }
+  });
 
-  let coloresLeidos = [];
+  video.srcObject = stream;
 
-  for (let i = 0; i < cantidad; i++) {
-    const data = ctx.getImageData(i * ancho + 1, 10, 1, 1).data;
-    const hex = rgbToHex(data[0], data[1], data[2]);
-    coloresLeidos.push(hexToNombre(hex));
-  }
+  requestAnimationFrame(scanFrame);
+}
 
-  // Quitar inicio y final
-  coloresLeidos = coloresLeidos.slice(3, -3);
+// distancia de color
+function dist(c1, c2){
+  return Math.sqrt(
+    (c1[0]-c2[0])**2 +
+    (c1[1]-c2[1])**2 +
+    (c1[2]-c2[2])**2
+  );
+}
 
-  let resultado = "";
+// encontrar color más cercano
+function detectarColor(r,g,b){
+  let mejor = null;
+  let min = 999999;
 
-  for (let i = 0; i < coloresLeidos.length; i += 2) {
-    let clave = coloresLeidos[i] + "-" + coloresLeidos[i + 1];
-    if (diccionario[clave]) {
-      resultado += diccionario[clave];
+  for (let nombre in colores){
+    let d = dist([r,g,b], colores[nombre]);
+    if (d < min){
+      min = d;
+      mejor = nombre;
     }
   }
 
-  document.getElementById("output").innerText = "Resultado: " + resultado;
+  return mejor;
 }
 
-function rgbToHex(r, g, b) {
-  return "#" + [r, g, b].map(x => x.toString(16).padStart(2, "0")).join("");
-}
+// ---------------- SCAN ----------------
+function scanFrame(){
+  if (modo !== "scan") return;
 
-function hexToNombre(hex) {
-  for (let key in colores) {
-    if (colores[key] === hex) return key;
+  const video = document.getElementById("video");
+
+  const temp = document.createElement("canvas");
+  temp.width = video.videoWidth;
+  temp.height = video.videoHeight;
+  const ctx = temp.getContext("2d");
+
+  ctx.drawImage(video,0,0);
+
+  let y = temp.height / 2;
+
+  let coloresLeidos = [];
+
+  // leemos línea horizontal
+  for (let x=0; x<temp.width; x+=10){
+    let data = ctx.getImageData(x,y,1,1).data;
+    let nombre = detectarColor(data[0],data[1],data[2]);
+
+    if (coloresLeidos.length === 0 || coloresLeidos[coloresLeidos.length-1] !== nombre){
+      coloresLeidos.push(nombre);
+    }
   }
-  return "desconocido";
+
+  // buscar inicio y fin
+  let texto = "";
+
+  for (let i=0;i<coloresLeidos.length;i++){
+    if (
+      coloresLeidos[i] === "blanco" &&
+      coloresLeidos[i+1] === "rojo" &&
+      coloresLeidos[i+2] === "blanco"
+    ){
+      let datos = [];
+
+      for (let j=i+3;j<coloresLeidos.length;j++){
+        if (
+          coloresLeidos[j] === "verde" &&
+          coloresLeidos[j+1] === "negro" &&
+          coloresLeidos[j+2] === "verde"
+        ){
+          break;
+        }
+        datos.push(coloresLeidos[j]);
+      }
+
+      // decodificar
+      for (let k=0;k<datos.length;k+=2){
+        let clave = datos[k] + "-" + datos[k+1];
+        if (diccionario[clave]){
+          texto += diccionario[clave];
+        }
+      }
+
+      break;
+    }
+  }
+
+  document.getElementById("output").innerText = "📷 " + texto;
+
+  requestAnimationFrame(scanFrame);
 }
 </script>
 
