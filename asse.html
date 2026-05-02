@@ -2,293 +2,135 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>ColorCode Pro v2</title>
-
+<title>Scanner Color v2</title>
 <style>
-body {
-  background: #111;
-  color: white;
-  font-family: Arial;
-  text-align: center;
-}
-
-button, input {
-  padding: 10px;
-  margin: 5px;
-  font-size: 16px;
-}
-
-canvas, video {
-  border: 2px solid white;
-  margin-top: 10px;
-}
+  body {
+    background: #111;
+    color: white;
+    text-align: center;
+    font-family: Arial;
+  }
+  video, canvas {
+    margin-top: 10px;
+    border: 2px solid white;
+  }
 </style>
 </head>
-
 <body>
 
-<h1>🎨 ColorCode Pro v2</h1>
-
-<button onclick="modo='generar'">Modo Generar</button>
-<button onclick="modo='scan'; iniciarCamara()">Modo Escanear</button>
-
-<br>
-
-<input id="inputText" placeholder="Ej: 87000" />
-
-<br>
-<button onclick="generar()">Generar código</button>
-
-<br>
-
-<canvas id="canvas" width="800" height="100"></canvas>
-
-<br>
-
+<h2>📷 Scanner de barras de colores</h2>
 <video id="video" width="400" height="200" autoplay></video>
+<canvas id="canvas" width="400" height="200"></canvas>
 
-<p id="output"></p>
+<p>Resultado: <span id="output">...</span></p>
 
 <script>
-let modo = "generar";
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const output = document.getElementById("output");
 
-// ---------------- COLORES ----------------
-const colores = {
-  rojo: [255,0,0],
-  verde: [0,255,0],
-  azul: [0,0,255],
-  negro: [0,0,0],
-  blanco: [255,255,255]
-};
+// 🎨 COLORES BASE (ajustables)
+const colores = [
+  { n: 0, c: [0,0,0] },       // negro
+  { n: 1, c: [255,255,255] }, // blanco
+  { n: 2, c: [255,0,0] },     // rojo
+  { n: 3, c: [0,255,0] },     // verde
+  { n: 4, c: [0,0,255] },     // azul
+  { n: 5, c: [255,255,0] },   // amarillo
+  { n: 6, c: [0,255,255] },   // celeste
+  { n: 7, c: [255,0,255] }    // magenta
+];
 
-const coloresHex = {
-  rojo: "#ff0000",
-  verde: "#00ff00",
-  azul: "#0000ff",
-  negro: "#000000",
-  blanco: "#ffffff"
-};
+// 📏 CONFIG
+const NUM_BARRAS = 6;
+const SCAN_HEIGHT_RATIO = 0.5; // línea al medio
+const SAMPLE_WIDTH_RATIO = 0.6; // evita bordes
 
-// ---------------- DICCIONARIO ----------------
-const diccionario = {
-  "negro-blanco": "0",
-  "negro-rojo": "1",
-  "negro-verde": "2",
-  "negro-azul": "3",
-  "blanco-rojo": "4",
-  "blanco-verde": "5",
-  "blanco-azul": "6",
-  "rojo-verde": "7",
-  "rojo-azul": "8",
-  "verde-azul": "9"
-};
+// 📷 Cámara
+navigator.mediaDevices.getUserMedia({ video: true })
+.then(stream => video.srcObject = stream);
 
-const dicInv = {};
-for (let k in diccionario) dicInv[diccionario[k]] = k;
-
-// patrones
-const START = ["blanco","rojo","blanco"];
-const END = ["verde","negro","verde"];
-
-// historial
-let historial = [];
-
-// ---------------- GENERADOR ----------------
-function generar() {
-  const texto = document.getElementById("inputText").value;
-  const canvas = document.getElementById("canvas");
-  const ctx = canvas.getContext("2d");
-
-  let seq = [...START];
-
-  function pushColor(c){
-    if (seq.length > 0 && seq[seq.length-1] === c){
-      let separador = (c === "blanco") ? "negro" : "blanco";
-      seq.push(separador);
-    }
-    seq.push(c);
-  }
-
-  for (let c of texto) {
-    if (!dicInv[c]) continue;
-    let [a,b] = dicInv[c].split("-");
-    pushColor(a);
-    pushColor(b);
-  }
-
-  for (let c of END) pushColor(c);
-
-  const w = 10;
-  canvas.width = seq.length * w;
-
-  for (let i=0;i<seq.length;i++){
-    ctx.fillStyle = coloresHex[seq[i]];
-    ctx.fillRect(i*w,0,w,canvas.height);
-  }
-}
-
-// ---------------- CAMARA ----------------
-async function iniciarCamara(){
-  const video = document.getElementById("video");
-
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: "environment" }
-  });
-
-  video.srcObject = stream;
-
-  requestAnimationFrame(scanFrame);
-}
-
-// distancia con ventaja a oscuro
-function dist(c1, c2){
-  let d = Math.sqrt(
+// 🎯 Distancia de color
+function dist(c1, c2) {
+  return Math.sqrt(
     (c1[0]-c2[0])**2 +
     (c1[1]-c2[1])**2 +
     (c1[2]-c2[2])**2
   );
-
-  let brillo = (c1[0]+c1[1]+c1[2])/3;
-  if (brillo < 80) d *= 0.7;
-
-  return d;
 }
 
-// detectar color
-function detectarColor(r,g,b){
-  let mejor = null;
-  let min = 999999;
+// 🎯 Detectar número más cercano
+function detectarColor(rgb) {
+  let min = Infinity;
+  let elegido = "?";
 
-  for (let nombre in colores){
-    let d = dist([r,g,b], colores[nombre]);
-    if (d < min){
+  for (let col of colores) {
+    let d = dist(rgb, col.c);
+    if (d < min) {
       min = d;
-      mejor = nombre;
+      elegido = col.n;
     }
   }
 
-  return mejor;
+  return elegido;
 }
 
-// predicción
-function predecir(){
-  let freq = {};
+// 🔍 Escaneo
+function scan() {
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-  for (let val of historial){
-    freq[val] = (freq[val] || 0) + 1;
-  }
+  let y = canvas.height * SCAN_HEIGHT_RATIO;
 
-  let mejor = "";
-  let max = 0;
+  // 🟥 línea guía
+  ctx.strokeStyle = "red";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, y);
+  ctx.lineTo(canvas.width, y);
+  ctx.stroke();
 
-  for (let k in freq){
-    if (freq[k] > max){
-      max = freq[k];
-      mejor = k;
-    }
-  }
+  let anchoBarra = canvas.width / NUM_BARRAS;
+  let resultado = "";
 
-  return mejor;
-}
+  for (let i = 0; i < NUM_BARRAS; i++) {
 
-// ---------------- SCAN ----------------
-function scanFrame(){
-  if (modo !== "scan") return;
+    // 📍 centro de cada barra (clave)
+    let x = i * anchoBarra + anchoBarra / 2;
 
-  const video = document.getElementById("video");
+    // 🧪 pequeño muestreo (evita mezcla)
+    let sampleWidth = anchoBarra * SAMPLE_WIDTH_RATIO;
+    let startX = x - sampleWidth / 2;
 
-  const temp = document.createElement("canvas");
-  temp.width = video.videoWidth;
-  temp.height = video.videoHeight;
-  const ctx = temp.getContext("2d");
+    let img = ctx.getImageData(startX, y, sampleWidth, 1).data;
 
-  ctx.drawImage(video,0,0);
+    let r=0,g=0,b=0,count=0;
 
-  let yStart = temp.height * 0.45;
-  let yEnd = temp.height * 0.55;
-
-  let coloresLeidos = [];
-
-  for (let x=0; x<temp.width; x+=4){
-
-    let suma = [0,0,0];
-    let count = 0;
-
-    for (let y=yStart; y<yEnd; y+=2){
-      let d = ctx.getImageData(x,y,1,1).data;
-      suma[0]+=d[0];
-      suma[1]+=d[1];
-      suma[2]+=d[2];
+    for (let j = 0; j < img.length; j += 4) {
+      r += img[j];
+      g += img[j+1];
+      b += img[j+2];
       count++;
     }
 
-    let r = suma[0]/count;
-    let g = suma[1]/count;
-    let b = suma[2]/count;
+    r /= count;
+    g /= count;
+    b /= count;
 
-    let nombre = detectarColor(r,g,b);
+    let numero = detectarColor([r,g,b]);
+    resultado += numero;
 
-    let last = coloresLeidos[coloresLeidos.length-1];
-    let last2 = coloresLeidos[coloresLeidos.length-2];
-
-    if (nombre !== last || nombre !== last2){
-      coloresLeidos.push(nombre);
-    }
+    // 🟩 debug visual
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(x-5, y-5, 10, 10);
   }
 
-  let texto = "";
+  output.textContent = resultado;
 
-  for (let i=0;i<coloresLeidos.length;i++){
-    if (
-      coloresLeidos[i] === "blanco" &&
-      coloresLeidos[i+1] === "rojo" &&
-      coloresLeidos[i+2] === "blanco"
-    ){
-      let datos = [];
-
-      for (let j=i+3;j<coloresLeidos.length;j++){
-        if (
-          coloresLeidos[j] === "verde" &&
-          coloresLeidos[j+1] === "negro" &&
-          coloresLeidos[j+2] === "verde"
-        ){
-          break;
-        }
-        datos.push(coloresLeidos[j]);
-      }
-
-      // limpiar ruido
-      let limpio = [];
-      for (let k=0;k<datos.length;k++){
-        if (k>0 && datos[k] === datos[k-1]) continue;
-        limpio.push(datos[k]);
-      }
-
-      // decodificar
-      for (let k=0;k<limpio.length;k+=2){
-        let clave = limpio[k] + "-" + limpio[k+1];
-        if (diccionario[clave]){
-          texto += diccionario[clave];
-        }
-      }
-
-      break;
-    }
-  }
-
-  if (texto.length > 0){
-    historial.push(texto);
-    if (historial.length > 20) historial.shift();
-  }
-
-  let pred = predecir();
-
-  document.getElementById("output").innerHTML =
-    "📷 Lectura: " + texto +
-    "<br><span style='color:#00aaff'>🧠 Predicción: " + pred + "</span>";
-
-  requestAnimationFrame(scanFrame);
+  requestAnimationFrame(scan);
 }
+
+video.addEventListener("play", scan);
 </script>
 
 </body>
