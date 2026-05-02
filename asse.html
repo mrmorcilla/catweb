@@ -1,6 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>ColorCode Pro</title>
+
+<style>
+body {
+  background: #111;
+  color: white;
+  font-family: Arial;
+  text-align: center;
+}
+
+button, input {
+  padding: 10px;
+  margin: 5px;
+  font-size: 16px;
+}
+
+canvas, video {
+  border: 2px solid white;
+  margin-top: 10px;
+}
+</style>
+</head>
+
+<body>
+
+<h1>🎨 ColorCode Pro</h1>
+
+<button onclick="modo='generar'">Modo Generar</button>
+<button onclick="modo='scan'; iniciarCamara()">Modo Escanear</button>
+
+<br>
+
+<input id="inputText" placeholder="Ej: 87000" />
+
+<br>
+<button onclick="generar()">Generar código</button>
+
+<br>
+
+<canvas id="canvas" width="800" height="100"></canvas>
+
+<br>
+
+<video id="video" width="400" height="200" autoplay></video>
+
+<p id="output"></p>
+
 <script>
 let modo = "generar";
 
+// ---------------- COLORES ----------------
 const colores = {
   rojo: [255,0,0],
   verde: [0,255,0],
@@ -17,6 +69,7 @@ const coloresHex = {
   blanco: "#ffffff"
 };
 
+// ---------------- DICCIONARIO ----------------
 const diccionario = {
   "negro-blanco": "0",
   "negro-rojo": "1",
@@ -33,10 +86,11 @@ const diccionario = {
 const dicInv = {};
 for (let k in diccionario) dicInv[diccionario[k]] = k;
 
+// patrones
 const START = ["blanco","rojo","blanco"];
 const END = ["verde","negro","verde"];
 
-// HISTORIAL para predicción
+// historial para predicción
 let historial = [];
 
 // ---------------- GENERADOR ----------------
@@ -56,6 +110,7 @@ function generar() {
   seq.push(...END);
 
   const w = 20;
+  canvas.width = seq.length * w;
 
   for (let i=0;i<seq.length;i++){
     ctx.fillStyle = coloresHex[seq[i]];
@@ -76,7 +131,7 @@ async function iniciarCamara(){
   requestAnimationFrame(scanFrame);
 }
 
-// distancia con peso oscuro
+// distancia con ventaja a oscuro
 function dist(c1, c2){
   let d = Math.sqrt(
     (c1[0]-c2[0])**2 +
@@ -84,14 +139,13 @@ function dist(c1, c2){
     (c1[2]-c2[2])**2
   );
 
-  // bonus para colores oscuros
   let brillo = (c1[0]+c1[1]+c1[2])/3;
   if (brillo < 80) d *= 0.7;
 
   return d;
 }
 
-// detectar color más cercano
+// detectar color
 function detectarColor(r,g,b){
   let mejor = null;
   let min = 999999;
@@ -107,7 +161,7 @@ function detectarColor(r,g,b){
   return mejor;
 }
 
-// predicción inteligente
+// predicción por frecuencia
 function predecir(){
   let freq = {};
 
@@ -141,7 +195,7 @@ function scanFrame(){
 
   ctx.drawImage(video,0,0);
 
-  // 🔥 ZONA CENTRAL (clave)
+  // zona central estable
   let yStart = temp.height * 0.45;
   let yEnd = temp.height * 0.55;
 
@@ -152,7 +206,6 @@ function scanFrame(){
     let suma = [0,0,0];
     let count = 0;
 
-    // promedio vertical (reduce ruido)
     for (let y=yStart; y<yEnd; y+=2){
       let d = ctx.getImageData(x,y,1,1).data;
       suma[0]+=d[0];
@@ -167,7 +220,6 @@ function scanFrame(){
 
     let nombre = detectarColor(r,g,b);
 
-    // filtro anti ruido
     if (
       coloresLeidos.length === 0 ||
       coloresLeidos[coloresLeidos.length-1] !== nombre
@@ -208,7 +260,7 @@ function scanFrame(){
     }
   }
 
-  // guardar historial (máx 20)
+  // guardar historial
   if (texto.length > 0){
     historial.push(texto);
     if (historial.length > 20) historial.shift();
@@ -223,3 +275,6 @@ function scanFrame(){
   requestAnimationFrame(scanFrame);
 }
 </script>
+
+</body>
+</html>
