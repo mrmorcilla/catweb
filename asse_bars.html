@@ -4,10 +4,7 @@
 <meta charset="UTF-8">
 <title>Barcode Tool</title>
 
-<!-- JsBarcode correcto -->
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
-
-<!-- ZXing -->
 <script src="https://unpkg.com/@zxing/library@0.19.1"></script>
 
 <style>
@@ -33,7 +30,7 @@ svg, video {
 <h1>Barcode Creator & Scanner</h1>
 
 <h2>Crear código</h2>
-<input id="text" placeholder="Escribí texto o números">
+<input id="text" placeholder="Texto o números">
 <button onclick="crear()">Generar</button>
 <br>
 <svg id="barcode"></svg>
@@ -41,13 +38,12 @@ svg, video {
 <h2>Escanear código</h2>
 <button onclick="iniciarCamara()">Iniciar cámara</button>
 <br>
-<video id="video" width="300" height="200"></video>
+<video id="video" width="300" height="200" autoplay muted playsinline></video>
 <p id="resultado"></p>
 
 <script>
 function crear() {
     const texto = document.getElementById("text").value;
-
     if (!texto) return;
 
     JsBarcode("#barcode", texto, {
@@ -55,8 +51,7 @@ function crear() {
         lineColor: "#000",
         background: "#fff",
         width: 2,
-        height: 100,
-        displayValue: true
+        height: 100
     });
 }
 
@@ -66,23 +61,17 @@ async function iniciarCamara() {
     const video = document.getElementById("video");
     const resultado = document.getElementById("resultado");
 
-    codeReader = new ZXing.BrowserMultiFormatReader();
-
     try {
-        const devices = await ZXing.BrowserCodeReader.listVideoInputDevices();
+        // 🔑 Pedir cámara trasera directamente
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" } }
+        });
 
-        let selectedDeviceId = devices[0].deviceId;
+        video.srcObject = stream;
 
-        // Buscar cámara trasera
-        for (let device of devices) {
-            if (device.label.toLowerCase().includes("back") || 
-                device.label.toLowerCase().includes("rear") ||
-                device.label.toLowerCase().includes("environment")) {
-                selectedDeviceId = device.deviceId;
-            }
-        }
+        codeReader = new ZXing.BrowserMultiFormatReader();
 
-        codeReader.decodeFromVideoDevice(selectedDeviceId, video, (result, err) => {
+        codeReader.decodeFromVideoElement(video, (result, err) => {
             if (result) {
                 resultado.textContent = "Resultado: " + result.text;
             }
@@ -90,7 +79,12 @@ async function iniciarCamara() {
 
     } catch (err) {
         console.error(err);
-        resultado.textContent = "Error al iniciar cámara";
+
+        if (location.protocol !== "https:" && location.hostname !== "localhost") {
+            resultado.textContent = "⚠️ Necesitas HTTPS o localhost";
+        } else {
+            resultado.textContent = "❌ Permiso de cámara denegado o no disponible";
+        }
     }
 }
 </script>
