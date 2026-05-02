@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Barcode Casero PRO</title>
+<title>Barcode Scanner PRO</title>
 
 <style>
 body {
@@ -28,7 +28,11 @@ body {
     height: 2px;
     background: red;
     top: 50%;
-    left: 0;
+}
+
+.info {
+    margin-top: 10px;
+    font-size: 18px;
 }
 
 canvas {
@@ -44,7 +48,7 @@ button, input {
 </head>
 <body>
 
-<h2>📸 Escáner de Barras Casero</h2>
+<h2>📸 Escáner Inteligente</h2>
 
 <div id="contenedor">
     <video id="video" autoplay playsinline></video>
@@ -54,7 +58,8 @@ button, input {
 <br>
 <button onclick="cambiarCamara()">🔄 Cambiar cámara</button>
 
-<p>Detectado: <span id="resultado">---</span></p>
+<div class="info">📡 Lectura en vivo: <span id="raw">---</span></div>
+<div class="info">🧠 Resultado estable: <span id="final">---</span></div>
 
 <input id="texto" placeholder="Ej: 010101">
 <button onclick="generar()">Generar</button>
@@ -63,13 +68,18 @@ button, input {
 
 <script>
 let video = document.getElementById("video");
-let resultado = document.getElementById("resultado");
+let rawText = document.getElementById("raw");
+let finalText = document.getElementById("final");
 
 let canvasScan = document.createElement("canvas");
 let ctxScan = canvasScan.getContext("2d");
 
 let usandoTrasera = true;
 let streamActual = null;
+
+// HISTORIAL
+let historial = [];
+let tiempoVentana = 2000; // ms
 
 // INICIAR CÁMARA
 async function iniciarCamara(){
@@ -86,20 +96,18 @@ async function iniciarCamara(){
         streamActual = stream;
         video.srcObject = stream;
     } catch(e){
-        // fallback
         let stream = await navigator.mediaDevices.getUserMedia({ video: true });
         streamActual = stream;
         video.srcObject = stream;
     }
 }
 
-// CAMBIAR CÁMARA
 function cambiarCamara(){
     usandoTrasera = !usandoTrasera;
     iniciarCamara();
 }
 
-// DETECCIÓN DE COLOR
+// COLOR
 function detectarColor(r,g,b){
     if(r>200 && g>200 && b>200) return "blanco";
     if(r<80 && g<80 && b<80) return "negro";
@@ -107,7 +115,7 @@ function detectarColor(r,g,b){
     return "otro";
 }
 
-// PROMEDIO DE BLOQUE
+// PROMEDIO
 function promedioColor(data){
     let r=0,g=0,b=0;
     let total = data.length/4;
@@ -121,9 +129,35 @@ function promedioColor(data){
     return [r/total, g/total, b/total];
 }
 
-// ESCÁNER
+// CALCULAR RESULTADO ESTABLE
+function calcularPromedio(){
+    let ahora = Date.now();
+
+    // limpiar viejo
+    historial = historial.filter(e => ahora - e.t < tiempoVentana);
+
+    let conteo = {};
+
+    for(let e of historial){
+        conteo[e.valor] = (conteo[e.valor] || 0) + 1;
+    }
+
+    let mejor = "---";
+    let max = 0;
+
+    for(let k in conteo){
+        if(conteo[k] > max){
+            max = conteo[k];
+            mejor = k;
+        }
+    }
+
+    finalText.textContent = mejor;
+}
+
+// ESCANEO
 function escanear(){
-    if(video.videoWidth === 0) {
+    if(video.videoWidth === 0){
         requestAnimationFrame(escanear);
         return;
     }
@@ -136,21 +170,28 @@ function escanear(){
     let y = canvasScan.height/2;
     let ancho = 30;
 
-    let resultadoFinal = "";
+    let resultado = "";
 
     for(let x=0; x<canvasScan.width; x+=ancho){
-
         let bloque = ctxScan.getImageData(x, y, ancho, 10).data;
         let [r,g,b] = promedioColor(bloque);
 
         let color = detectarColor(r,g,b);
 
-        if(color === "negro") resultadoFinal += "0";
-        if(color === "verde") resultadoFinal += "1";
-        // blanco = separador
+        if(color === "negro") resultado += "0";
+        if(color === "verde") resultado += "1";
     }
 
-    resultado.textContent = resultadoFinal || "---";
+    rawText.textContent = resultado || "---";
+
+    if(resultado){
+        historial.push({
+            valor: resultado,
+            t: Date.now()
+        });
+    }
+
+    calcularPromedio();
 
     requestAnimationFrame(escanear);
 }
@@ -169,20 +210,17 @@ function generar(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
     for(let char of texto){
-
         let color;
 
         if(char === "0") color = "black";
         else if(char === "1") color = "green";
         else continue;
 
-        // barra de dato
         ctx.fillStyle = color;
         ctx.fillRect(x, 0, ancho, canvas.height);
 
         x += ancho;
 
-        // separador blanco (clave)
         ctx.fillStyle = "white";
         ctx.fillRect(x, 0, ancho, canvas.height);
 
@@ -190,7 +228,6 @@ function generar(){
     }
 }
 
-// iniciar automáticamente
 iniciarCamara();
 </script>
 
