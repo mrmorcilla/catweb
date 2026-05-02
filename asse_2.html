@@ -12,6 +12,11 @@ body {
     font-family: Arial;
 }
 
+#contenedor {
+    position: relative;
+    display: inline-block;
+}
+
 #video {
     width: 400px;
     border: 2px solid white;
@@ -19,49 +24,82 @@ body {
 
 #linea {
     position: absolute;
-    width: 400px;
+    width: 100%;
     height: 2px;
     background: red;
     top: 50%;
+    left: 0;
 }
 
 canvas {
     margin-top: 20px;
     border: 1px solid white;
 }
+
+button, input {
+    margin-top: 10px;
+    padding: 6px;
+}
 </style>
 </head>
 <body>
 
-<h2>📸 Escáner de Barras Simple</h2>
+<h2>📸 Escáner de Barras Casero</h2>
 
-<video id="video" autoplay></video>
-<div id="linea"></div>
+<div id="contenedor">
+    <video id="video" autoplay playsinline></video>
+    <div id="linea"></div>
+</div>
+
+<br>
+<button onclick="cambiarCamara()">🔄 Cambiar cámara</button>
 
 <p>Detectado: <span id="resultado">---</span></p>
 
-<input id="texto" placeholder="Ej: 12345">
+<input id="texto" placeholder="Ej: 010101">
 <button onclick="generar()">Generar</button>
 
 <canvas id="canvasCodigo" width="500" height="100"></canvas>
 
 <script>
-const video = document.getElementById("video");
-const resultado = document.getElementById("resultado");
-const canvasScan = document.createElement("canvas");
-const ctxScan = canvasScan.getContext("2d");
+let video = document.getElementById("video");
+let resultado = document.getElementById("resultado");
 
-navigator.mediaDevices.getUserMedia({ video: true })
-.then(stream => video.srcObject = stream);
+let canvasScan = document.createElement("canvas");
+let ctxScan = canvasScan.getContext("2d");
 
-// MAPEO SIMPLE: color → número
-const mapaColor = {
-    "negro": "0",
-    "verde": "1",
-    "blanco": "" // separador
-};
+let usandoTrasera = true;
+let streamActual = null;
 
-// DETECTOR DE COLOR (con tolerancia)
+// INICIAR CÁMARA
+async function iniciarCamara(){
+    if(streamActual){
+        streamActual.getTracks().forEach(t => t.stop());
+    }
+
+    try {
+        let stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: usandoTrasera ? { exact: "environment" } : "user"
+            }
+        });
+        streamActual = stream;
+        video.srcObject = stream;
+    } catch(e){
+        // fallback
+        let stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        streamActual = stream;
+        video.srcObject = stream;
+    }
+}
+
+// CAMBIAR CÁMARA
+function cambiarCamara(){
+    usandoTrasera = !usandoTrasera;
+    iniciarCamara();
+}
+
+// DETECCIÓN DE COLOR
 function detectarColor(r,g,b){
     if(r>200 && g>200 && b>200) return "blanco";
     if(r<80 && g<80 && b<80) return "negro";
@@ -69,7 +107,7 @@ function detectarColor(r,g,b){
     return "otro";
 }
 
-// PROMEDIO DE BLOQUE (clave 🔥)
+// PROMEDIO DE BLOQUE
 function promedioColor(data){
     let r=0,g=0,b=0;
     let total = data.length/4;
@@ -83,7 +121,13 @@ function promedioColor(data){
     return [r/total, g/total, b/total];
 }
 
+// ESCÁNER
 function escanear(){
+    if(video.videoWidth === 0) {
+        requestAnimationFrame(escanear);
+        return;
+    }
+
     canvasScan.width = video.videoWidth;
     canvasScan.height = video.videoHeight;
 
@@ -101,9 +145,9 @@ function escanear(){
 
         let color = detectarColor(r,g,b);
 
-        if(color !== "blanco" && color !== "otro"){
-            resultadoFinal += mapaColor[color];
-        }
+        if(color === "negro") resultadoFinal += "0";
+        if(color === "verde") resultadoFinal += "1";
+        // blanco = separador
     }
 
     resultado.textContent = resultadoFinal || "---";
@@ -112,7 +156,6 @@ function escanear(){
 }
 
 video.addEventListener("play", escanear);
-
 
 // GENERADOR
 function generar(){
@@ -123,24 +166,15 @@ function generar(){
     let ancho = 30;
     let x = 0;
 
-    const mapa = {
-        "0": "black",
-        "1": "green",
-        "2": "black",
-        "3": "green",
-        "4": "black",
-        "5": "green",
-        "6": "black",
-        "7": "green",
-        "8": "black",
-        "9": "green"
-    };
-
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
     for(let char of texto){
-        let color = mapa[char];
-        if(!color) continue;
+
+        let color;
+
+        if(char === "0") color = "black";
+        else if(char === "1") color = "green";
+        else continue;
 
         // barra de dato
         ctx.fillStyle = color;
@@ -148,13 +182,16 @@ function generar(){
 
         x += ancho;
 
-        // separador blanco (clave 🔥)
+        // separador blanco (clave)
         ctx.fillStyle = "white";
         ctx.fillRect(x, 0, ancho, canvas.height);
 
         x += ancho;
     }
 }
+
+// iniciar automáticamente
+iniciarCamara();
 </script>
 
 </body>
