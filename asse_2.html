@@ -2,8 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Barcode PRO v3</title>
-
+<title>Scanner Lineal PRO</title>
 <style>
 body {
     background: #111;
@@ -12,241 +11,120 @@ body {
     font-family: Arial;
 }
 
-#contenedor {
-    position: relative;
-    display: inline-block;
-}
-
-#video {
-    width: 400px;
+video, canvas {
     border: 2px solid white;
-}
-
-#linea {
-    position: absolute;
-    width: 100%;
-    height: 2px;
-    background: red;
-    top: 50%;
-}
-
-.info {
     margin-top: 10px;
 }
 
-canvas {
-    margin-top: 20px;
-    border: 1px solid white;
+#resultado {
+    font-size: 24px;
+    margin-top: 15px;
+    color: #00ffcc;
 }
 </style>
 </head>
 <body>
 
-<h2>📸 Escáner PRO (estable)</h2>
+<h2>📷 Scanner de Código por Colores</h2>
 
-<div id="contenedor">
-    <video id="video" autoplay playsinline></video>
-    <div id="linea"></div>
-</div>
+<video id="video" width="400" height="300" autoplay></video>
+<canvas id="canvas" width="400" height="300"></canvas>
 
-<br>
-<button onclick="cambiarCamara()">🔄 Cámara</button>
-
-<div class="info">📡 Lectura: <span id="raw">---</span></div>
-<div class="info">🧠 Estable: <span id="final">---</span></div>
-
-<input id="texto" placeholder="Ej: 10101">
-<button onclick="generar()">Generar</button>
-
-<canvas id="canvasCodigo" width="600" height="100"></canvas>
+<div id="resultado">Esperando lectura...</div>
 
 <script>
-let video = document.getElementById("video");
-let rawText = document.getElementById("raw");
-let finalText = document.getElementById("final");
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const resultado = document.getElementById("resultado");
 
-let canvasScan = document.createElement("canvas");
-let ctxScan = canvasScan.getContext("2d");
+// Iniciar cámara
+navigator.mediaDevices.getUserMedia({ video: true })
+.then(stream => {
+    video.srcObject = stream;
+})
+.catch(err => {
+    alert("Error al abrir cámara");
+});
 
-let streamActual = null;
-let usandoTrasera = true;
-
-let historial = [];
-let ventana = 2000;
-
-// cámara
-async function iniciarCamara(){
-    if(streamActual){
-        streamActual.getTracks().forEach(t => t.stop());
-    }
-
-    try {
-        let stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                facingMode: usandoTrasera ? { exact: "environment" } : "user"
-            }
-        });
-        streamActual = stream;
-        video.srcObject = stream;
-    } catch {
-        let stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        streamActual = stream;
-        video.srcObject = stream;
-    }
+// Función para detectar colores
+function esRojo(r, g, b) {
+    return r > 150 && g < 80 && b < 80;
 }
 
-function cambiarCamara(){
-    usandoTrasera = !usandoTrasera;
-    iniciarCamara();
+function esNegro(r, g, b) {
+    return r < 60 && g < 60 && b < 60;
 }
 
-// DETECCIÓN ROBUSTA
-function detectarColor(r,g,b){
-
-    // blanco
-    if(r>200 && g>200 && b>200) return "blanco";
-
-    // negro
-    if(r<60 && g<60 && b<60) return "negro";
-
-    // rojo dominante 🔴
-    if(r > g*1.5 && r > b*1.5 && r > 100){
-        return "rojo";
-    }
-
-    return "otro";
+function esBlanco(r, g, b) {
+    return r > 180 && g > 180 && b > 180;
 }
 
-// promedio
-function promedio(data){
-    let r=0,g=0,b=0;
-    let total = data.length/4;
+// Escaneo principal
+function escanear() {
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    for(let i=0;i<data.length;i+=4){
-        r+=data[i];
-        g+=data[i+1];
-        b+=data[i+2];
-    }
+    const y = Math.floor(canvas.height / 2);
+    const img = ctx.getImageData(0, y, canvas.width, 1);
+    const data = img.data;
 
-    return [r/total, g/total, b/total];
-}
+    // Dibujar línea guía
+    ctx.strokeStyle = "lime";
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(canvas.width, y);
+    ctx.stroke();
 
-// resultado estable
-function calcularFinal(){
-    let ahora = Date.now();
-    historial = historial.filter(e => ahora - e.t < ventana);
+    let centro = Math.floor(canvas.width / 2);
 
-    let conteo = {};
+    // 🔍 Buscar primer rojo desde el centro hacia la izquierda
+    let inicio = -1;
+    for (let x = centro; x >= 0; x--) {
+        let i = x * 4;
+        let r = data[i], g = data[i+1], b = data[i+2];
 
-    for(let e of historial){
-        conteo[e.valor] = (conteo[e.valor]||0)+1;
-    }
-
-    let mejor="---", max=0;
-
-    for(let k in conteo){
-        if(conteo[k]>max){
-            max=conteo[k];
-            mejor=k;
+        if (esRojo(r,g,b)) {
+            inicio = x;
+            break;
         }
     }
 
-    finalText.textContent = mejor;
-}
-
-// escaneo
-function escanear(){
-    if(video.videoWidth===0){
+    if (inicio === -1) {
+        resultado.innerText = "No detecto inicio";
         requestAnimationFrame(escanear);
         return;
     }
 
-    canvasScan.width = video.videoWidth;
-    canvasScan.height = video.videoHeight;
+    // 👉 Ahora recorrer hacia la derecha
+    let bits = "";
+    let leyendo = false;
 
-    ctxScan.drawImage(video,0,0);
+    for (let x = inicio; x < canvas.width; x++) {
+        let i = x * 4;
+        let r = data[i], g = data[i+1], b = data[i+2];
 
-    let y = canvasScan.height/2;
-    let ancho = 14;
+        if (esRojo(r,g,b) && leyendo) {
+            break; // fin del código
+        }
 
-    let colores = [];
+        if (esBlanco(r,g,b)) {
+            bits += "1";
+            leyendo = true;
+        }
 
-    for(let x=0;x<canvasScan.width;x+=ancho){
-        let data = ctxScan.getImageData(x,y,ancho,8).data;
-        let [r,g,b] = promedio(data);
-
-        let c = detectarColor(r,g,b);
-        colores.push(c);
-    }
-
-    let inicio = colores.indexOf("rojo");
-    let fin = colores.lastIndexOf("rojo");
-
-    let resultado = "";
-
-    if(inicio !== -1 && fin !== -1 && fin > inicio){
-
-        for(let i=inicio;i<=fin;i++){
-            let c = colores[i];
-
-            if(c === "negro") resultado += "0";
-            if(c === "rojo") resultado += "1";
+        if (esNegro(r,g,b)) {
+            if (leyendo) bits += "0";
         }
     }
 
-    rawText.textContent = resultado || "---";
-
-    if(resultado){
-        historial.push({valor:resultado,t:Date.now()});
-    }
-
-    calcularFinal();
+    resultado.innerText = bits || "Leyendo...";
 
     requestAnimationFrame(escanear);
 }
 
-video.addEventListener("play", escanear);
-
-// generador
-function generar(){
-    let texto = document.getElementById("texto").value;
-    let canvas = document.getElementById("canvasCodigo");
-    let ctx = canvas.getContext("2d");
-
-    let ancho = 14;
-    let x = 0;
-
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-
-    // inicio rojo
-    ctx.fillStyle = "red";
-    ctx.fillRect(x,0,ancho,canvas.height);
-    x+=ancho;
-
-    ctx.fillStyle = "white";
-    ctx.fillRect(x,0,ancho,canvas.height);
-    x+=ancho;
-
-    for(let char of texto){
-        let color;
-
-        if(char === "0") color="black";
-        else if(char === "1") color="red";
-        else continue;
-
-        ctx.fillStyle=color;
-        ctx.fillRect(x,0,ancho,canvas.height);
-        x+=ancho;
-
-        ctx.fillStyle="white";
-        ctx.fillRect(x,0,ancho,canvas.height);
-        x+=ancho;
-    }
-
-    // fin rojo
-    ctx.fillStyle="red";
-    ctx.fillRect(x,0,ancho,canvas.height);
-}
+video.addEventListener("play", () => {
+    escanear();
+});
 </script>
 
 </body>
