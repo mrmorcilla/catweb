@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>ColorCode Pro</title>
+<title>ColorCode Pro v2</title>
 
 <style>
 body {
@@ -27,7 +27,7 @@ canvas, video {
 
 <body>
 
-<h1>🎨 ColorCode Pro</h1>
+<h1>🎨 ColorCode Pro v2</h1>
 
 <button onclick="modo='generar'">Modo Generar</button>
 <button onclick="modo='scan'; iniciarCamara()">Modo Escanear</button>
@@ -90,7 +90,7 @@ for (let k in diccionario) dicInv[diccionario[k]] = k;
 const START = ["blanco","rojo","blanco"];
 const END = ["verde","negro","verde"];
 
-// historial para predicción
+// historial
 let historial = [];
 
 // ---------------- GENERADOR ----------------
@@ -101,15 +101,24 @@ function generar() {
 
   let seq = [...START];
 
+  function pushColor(c){
+    if (seq.length > 0 && seq[seq.length-1] === c){
+      let separador = (c === "blanco") ? "negro" : "blanco";
+      seq.push(separador);
+    }
+    seq.push(c);
+  }
+
   for (let c of texto) {
     if (!dicInv[c]) continue;
     let [a,b] = dicInv[c].split("-");
-    seq.push(a,b);
+    pushColor(a);
+    pushColor(b);
   }
 
-  seq.push(...END);
+  for (let c of END) pushColor(c);
 
-  const w = 20;
+  const w = 10;
   canvas.width = seq.length * w;
 
   for (let i=0;i<seq.length;i++){
@@ -161,7 +170,7 @@ function detectarColor(r,g,b){
   return mejor;
 }
 
-// predicción por frecuencia
+// predicción
 function predecir(){
   let freq = {};
 
@@ -195,13 +204,12 @@ function scanFrame(){
 
   ctx.drawImage(video,0,0);
 
-  // zona central estable
   let yStart = temp.height * 0.45;
   let yEnd = temp.height * 0.55;
 
   let coloresLeidos = [];
 
-  for (let x=0; x<temp.width; x+=8){
+  for (let x=0; x<temp.width; x+=4){
 
     let suma = [0,0,0];
     let count = 0;
@@ -220,10 +228,10 @@ function scanFrame(){
 
     let nombre = detectarColor(r,g,b);
 
-    if (
-      coloresLeidos.length === 0 ||
-      coloresLeidos[coloresLeidos.length-1] !== nombre
-    ){
+    let last = coloresLeidos[coloresLeidos.length-1];
+    let last2 = coloresLeidos[coloresLeidos.length-2];
+
+    if (nombre !== last || nombre !== last2){
       coloresLeidos.push(nombre);
     }
   }
@@ -249,8 +257,16 @@ function scanFrame(){
         datos.push(coloresLeidos[j]);
       }
 
-      for (let k=0;k<datos.length;k+=2){
-        let clave = datos[k] + "-" + datos[k+1];
+      // limpiar ruido
+      let limpio = [];
+      for (let k=0;k<datos.length;k++){
+        if (k>0 && datos[k] === datos[k-1]) continue;
+        limpio.push(datos[k]);
+      }
+
+      // decodificar
+      for (let k=0;k<limpio.length;k+=2){
+        let clave = limpio[k] + "-" + limpio[k+1];
         if (diccionario[clave]){
           texto += diccionario[clave];
         }
@@ -260,7 +276,6 @@ function scanFrame(){
     }
   }
 
-  // guardar historial
   if (texto.length > 0){
     historial.push(texto);
     if (historial.length > 20) historial.shift();
