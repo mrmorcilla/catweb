@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Barcode Casero PRO</title>
+
+<style>
+body {
+    background: #111;
+    color: white;
+    text-align: center;
+    font-family: Arial;
+}
+
+#video {
+    width: 400px;
+    border: 2px solid white;
+}
+
+#linea {
+    position: absolute;
+    width: 400px;
+    height: 2px;
+    background: red;
+    top: 50%;
+}
+
+canvas {
+    margin-top: 20px;
+    border: 1px solid white;
+}
+</style>
+</head>
+<body>
+
+<h2>📸 Escáner de Barras Simple</h2>
+
+<video id="video" autoplay></video>
+<div id="linea"></div>
+
+<p>Detectado: <span id="resultado">---</span></p>
+
+<input id="texto" placeholder="Ej: 12345">
+<button onclick="generar()">Generar</button>
+
+<canvas id="canvasCodigo" width="500" height="100"></canvas>
+
+<script>
+const video = document.getElementById("video");
+const resultado = document.getElementById("resultado");
+const canvasScan = document.createElement("canvas");
+const ctxScan = canvasScan.getContext("2d");
+
+navigator.mediaDevices.getUserMedia({ video: true })
+.then(stream => video.srcObject = stream);
+
+// MAPEO SIMPLE: color → número
+const mapaColor = {
+    "negro": "0",
+    "verde": "1",
+    "blanco": "" // separador
+};
+
+// DETECTOR DE COLOR (con tolerancia)
+function detectarColor(r,g,b){
+    if(r>200 && g>200 && b>200) return "blanco";
+    if(r<80 && g<80 && b<80) return "negro";
+    if(g>120 && r<100 && b<100) return "verde";
+    return "otro";
+}
+
+// PROMEDIO DE BLOQUE (clave 🔥)
+function promedioColor(data){
+    let r=0,g=0,b=0;
+    let total = data.length/4;
+
+    for(let i=0;i<data.length;i+=4){
+        r += data[i];
+        g += data[i+1];
+        b += data[i+2];
+    }
+
+    return [r/total, g/total, b/total];
+}
+
+function escanear(){
+    canvasScan.width = video.videoWidth;
+    canvasScan.height = video.videoHeight;
+
+    ctxScan.drawImage(video, 0, 0);
+
+    let y = canvasScan.height/2;
+    let ancho = 30;
+
+    let resultadoFinal = "";
+
+    for(let x=0; x<canvasScan.width; x+=ancho){
+
+        let bloque = ctxScan.getImageData(x, y, ancho, 10).data;
+        let [r,g,b] = promedioColor(bloque);
+
+        let color = detectarColor(r,g,b);
+
+        if(color !== "blanco" && color !== "otro"){
+            resultadoFinal += mapaColor[color];
+        }
+    }
+
+    resultado.textContent = resultadoFinal || "---";
+
+    requestAnimationFrame(escanear);
+}
+
+video.addEventListener("play", escanear);
+
+
+// GENERADOR
+function generar(){
+    let texto = document.getElementById("texto").value;
+    let canvas = document.getElementById("canvasCodigo");
+    let ctx = canvas.getContext("2d");
+
+    let ancho = 30;
+    let x = 0;
+
+    const mapa = {
+        "0": "black",
+        "1": "green",
+        "2": "black",
+        "3": "green",
+        "4": "black",
+        "5": "green",
+        "6": "black",
+        "7": "green",
+        "8": "black",
+        "9": "green"
+    };
+
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    for(let char of texto){
+        let color = mapa[char];
+        if(!color) continue;
+
+        // barra de dato
+        ctx.fillStyle = color;
+        ctx.fillRect(x, 0, ancho, canvas.height);
+
+        x += ancho;
+
+        // separador blanco (clave 🔥)
+        ctx.fillStyle = "white";
+        ctx.fillRect(x, 0, ancho, canvas.height);
+
+        x += ancho;
+    }
+}
+</script>
+
+</body>
+</html>
