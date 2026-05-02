@@ -2,26 +2,56 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Barcode Tool</title>
+<title>Barcode Pro Scanner</title>
 
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.19.1"></script>
 
 <style>
 body {
-    font-family: Arial;
     background: #111;
     color: white;
     text-align: center;
+    font-family: Arial;
 }
+
 input, button {
     padding: 10px;
     margin: 10px;
-    font-size: 16px;
 }
-svg, video {
-    margin-top: 15px;
+
+#container {
+    position: relative;
+    display: inline-block;
+}
+
+video {
     border: 2px solid white;
+}
+
+/* 🔴 Línea de escaneo */
+#scanLine {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: red;
+    box-shadow: 0 0 10px red;
+    transform-origin: center;
+}
+
+/* 📦 Caja de detección */
+#box {
+    position: absolute;
+    border: 2px solid lime;
+    pointer-events: none;
+}
+
+#resultado {
+    margin-top: 10px;
+    font-size: 18px;
+    color: #0f0;
 }
 </style>
 </head>
@@ -29,17 +59,21 @@ svg, video {
 
 <h1>Barcode Creator & Scanner</h1>
 
-<h2>Crear código</h2>
-<input id="text" placeholder="Texto o números">
-<button onclick="crear()">Generar</button>
-<br>
+<h2>Crear</h2>
+<input id="text" placeholder="Texto">
+<button onclick="crear()">Generar</button><br>
 <svg id="barcode"></svg>
 
-<h2>Escanear código</h2>
+<h2>Escanear</h2>
 <button onclick="iniciarCamara()">Iniciar cámara</button>
-<br>
-<video id="video" width="300" height="200" autoplay muted playsinline></video>
-<p id="resultado"></p>
+
+<div id="container">
+    <video id="video" width="320" height="240" autoplay muted playsinline></video>
+    <div id="scanLine"></div>
+    <div id="box"></div>
+</div>
+
+<p id="resultado">Esperando escaneo...</p>
 
 <script>
 function crear() {
@@ -60,9 +94,10 @@ let codeReader;
 async function iniciarCamara() {
     const video = document.getElementById("video");
     const resultado = document.getElementById("resultado");
+    const box = document.getElementById("box");
+    const scanLine = document.getElementById("scanLine");
 
     try {
-        // 🔑 Pedir cámara trasera directamente
         const stream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: { ideal: "environment" } }
         });
@@ -72,19 +107,42 @@ async function iniciarCamara() {
         codeReader = new ZXing.BrowserMultiFormatReader();
 
         codeReader.decodeFromVideoElement(video, (result, err) => {
+
+            // 🔄 Feedback en tiempo real
+            resultado.textContent = "Escaneando...";
+
             if (result) {
-                resultado.textContent = "Resultado: " + result.text;
+                resultado.textContent = "✅ " + result.text;
+
+                // 📦 Dibujar caja
+                if (result.resultPoints) {
+                    let points = result.resultPoints;
+
+                    let minX = Math.min(...points.map(p => p.x));
+                    let maxX = Math.max(...points.map(p => p.x));
+                    let minY = Math.min(...points.map(p => p.y));
+                    let maxY = Math.max(...points.map(p => p.y));
+
+                    box.style.left = minX + "px";
+                    box.style.top = minY + "px";
+                    box.style.width = (maxX - minX) + "px";
+                    box.style.height = (maxY - minY) + "px";
+
+                    // 📐 Rotación de la línea (según inclinación)
+                    if (points.length >= 2) {
+                        let dx = points[1].x - points[0].x;
+                        let dy = points[1].y - points[0].y;
+                        let angle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+                        scanLine.style.transform = `rotate(${angle}deg)`;
+                    }
+                }
             }
         });
 
     } catch (err) {
         console.error(err);
-
-        if (location.protocol !== "https:" && location.hostname !== "localhost") {
-            resultado.textContent = "⚠️ Necesitas HTTPS o localhost";
-        } else {
-            resultado.textContent = "❌ Permiso de cámara denegado o no disponible";
-        }
+        resultado.textContent = "❌ Error con la cámara";
     }
 }
 </script>
