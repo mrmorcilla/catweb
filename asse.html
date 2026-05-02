@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>ColorCode Pro v2</title>
+<title>ColorCode Pro v3</title>
 
 <style>
 body {
@@ -27,7 +27,7 @@ canvas, video {
 
 <body>
 
-<h1>🎨 ColorCode Pro v2</h1>
+<h1>🎨 ColorCode Pro v3</h1>
 
 <button onclick="modo='generar'">Modo Generar</button>
 <button onclick="modo='scan'; iniciarCamara()">Modo Escanear</button>
@@ -170,7 +170,7 @@ function detectarColor(r,g,b){
   return mejor;
 }
 
-// predicción
+// predicción estable
 function predecir(){
   let freq = {};
 
@@ -208,8 +208,11 @@ function scanFrame(){
   let yEnd = temp.height * 0.55;
 
   let coloresLeidos = [];
+  let buffer = [];
 
-  for (let x=0; x<temp.width; x+=4){
+  const paso = 10;
+
+  for (let x=0; x<temp.width; x+=paso){
 
     let suma = [0,0,0];
     let count = 0;
@@ -228,10 +231,16 @@ function scanFrame(){
 
     let nombre = detectarColor(r,g,b);
 
+    // buffer anti-ruido
+    buffer.push(nombre);
+    if (buffer.length > 3) buffer.shift();
+
+    let estable = buffer.every(c => c === buffer[0]);
+
     let last = coloresLeidos[coloresLeidos.length-1];
     let last2 = coloresLeidos[coloresLeidos.length-2];
 
-    if (nombre !== last || nombre !== last2){
+    if (estable && nombre !== last && nombre !== last2){
       coloresLeidos.push(nombre);
     }
   }
@@ -257,7 +266,7 @@ function scanFrame(){
         datos.push(coloresLeidos[j]);
       }
 
-      // limpiar ruido
+      // limpiar duplicados
       let limpio = [];
       for (let k=0;k<datos.length;k++){
         if (k>0 && datos[k] === datos[k-1]) continue;
