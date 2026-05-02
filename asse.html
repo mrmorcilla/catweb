@@ -139,6 +139,8 @@ const scanCtx = scanCanvas.getContext("2d");
 
 setInterval(scan, 300);
 
+let lastResults = [];
+
 function scan() {
   if (!video.videoWidth) return;
 
@@ -147,23 +149,47 @@ function scan() {
 
   scanCtx.drawImage(video, 0, 0);
 
-  // 🔲 área central (solo escaneamos esto)
   let boxSize = Math.min(scanCanvas.width, scanCanvas.height) * 0.5;
   let startX = (scanCanvas.width - boxSize) / 2;
   let startY = (scanCanvas.height - boxSize) / 2;
 
   let size = 8;
   let bits = "";
-
   let step = boxSize / size;
 
+  // 🧠 1. verificar borde negro
+  let borderCheck = 0;
+  let borderTotal = 0;
+
+  for (let i = 0; i < size; i++) {
+    let px = Math.floor(startX + i * step + step/2);
+    let pyTop = Math.floor(startY + step/2);
+    let pyBottom = Math.floor(startY + (size-1)*step + step/2);
+
+    let top = scanCtx.getImageData(px, pyTop, 1, 1).data;
+    let bottom = scanCtx.getImageData(px, pyBottom, 1, 1).data;
+
+    let bt = (top[0]+top[1]+top[2])/3;
+    let bb = (bottom[0]+bottom[1]+bottom[2])/3;
+
+    if (bt < 100) borderCheck++;
+    if (bb < 100) borderCheck++;
+
+    borderTotal += 2;
+  }
+
+  let borderRatio = borderCheck / borderTotal;
+
+  // ❌ si no hay borde claro → no escanear
+  if (borderRatio < 0.6) return;
+
+  // 🧠 2. leer datos con promedio
   for (let y = 1; y < size-1; y++) {
     for (let x = 1; x < size-1; x++) {
 
       let px = Math.floor(startX + x * step);
       let py = Math.floor(startY + y * step);
 
-      // 🧠 promedio de píxeles (5x5)
       let total = 0;
       let count = 0;
 
@@ -171,7 +197,7 @@ function scan() {
         for (let dy = -2; dy <= 2; dy++) {
 
           let data = scanCtx.getImageData(px+dx, py+dy, 1, 1).data;
-          let brightness = (data[0] + data[1] + data[2]) / 3;
+          let brightness = (data[0]+data[1]+data[2])/3;
 
           total += brightness;
           count++;
@@ -179,11 +205,11 @@ function scan() {
       }
 
       let avg = total / count;
-
       bits += avg < 128 ? "1" : "0";
     }
   }
 
+  // 🧠 3. decodificar con validación
   if (bits.length >= 24) {
     let nums = [];
     let valid = true;
@@ -200,9 +226,19 @@ function scan() {
       nums.push(num);
     }
 
-    if (valid) {
+    if (!valid) return;
+
+    let result = nums.join("");
+
+    // 🧠 4. estabilidad (anti ruido)
+    lastResults.push(result);
+    if (lastResults.length > 5) lastResults.shift();
+
+    let iguales = lastResults.filter(r => r === result).length;
+
+    if (iguales >= 3) {
       document.getElementById("resultado").innerText =
-        "Detectado: " + nums.join("");
+        "Detectado: " + result;
     }
   }
 }
