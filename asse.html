@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Scanner Color v2</title>
+<title>Color Code v3</title>
 <style>
   body {
     background: #111;
@@ -10,119 +10,146 @@
     text-align: center;
     font-family: Arial;
   }
-  video, canvas {
-    margin-top: 10px;
+  canvas, video {
     border: 2px solid white;
+    margin-top: 10px;
+  }
+  input {
+    margin-top: 10px;
+    font-size: 18px;
+    padding: 5px;
   }
 </style>
 </head>
 <body>
 
-<h2>📷 Scanner de barras de colores</h2>
+<h2>🎨 Generador + Scanner de Barras</h2>
+
+<input id="texto" placeholder="Ej: 634129">
+<button onclick="generar()">Generar</button>
+
+<br>
+
+<canvas id="gen" width="400" height="100"></canvas>
+
+<br>
+
 <video id="video" width="400" height="200" autoplay></video>
-<canvas id="canvas" width="400" height="200"></canvas>
+<canvas id="scan" width="400" height="200"></canvas>
 
 <p>Resultado: <span id="output">...</span></p>
 
 <script>
+// 🎨 COLORES
+const colores = {
+  "0":[0,0,0],
+  "1":[255,255,255],
+  "2":[255,0,0],
+  "3":[0,255,0],
+  "4":[0,0,255],
+  "5":[255,255,0],
+  "6":[0,255,255],
+  "7":[255,0,255]
+};
+
+// 📏 CONFIG
+const SEPARADOR = 4; // espacio entre barras
+const ALTURA = 100;
+
+// 🎨 GENERADOR
+function generar() {
+  let texto = document.getElementById("texto").value;
+  let canvas = document.getElementById("gen");
+  let ctx = canvas.getContext("2d");
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  let anchoTotal = canvas.width;
+  let anchoBarra = (anchoTotal / texto.length) * 0.6;
+
+  let x = 0;
+
+  for (let i = 0; i < texto.length; i++) {
+    let num = texto[i];
+    let color = colores[num] || [100,100,100];
+
+    ctx.fillStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
+
+    ctx.fillRect(x, 0, anchoBarra, ALTURA);
+
+    x += anchoBarra + SEPARADOR;
+  }
+}
+
+// 📷 SCANNER
 const video = document.getElementById("video");
-const canvas = document.getElementById("canvas");
+const canvas = document.getElementById("scan");
 const ctx = canvas.getContext("2d");
 const output = document.getElementById("output");
 
-// 🎨 COLORES BASE (ajustables)
-const colores = [
-  { n: 0, c: [0,0,0] },       // negro
-  { n: 1, c: [255,255,255] }, // blanco
-  { n: 2, c: [255,0,0] },     // rojo
-  { n: 3, c: [0,255,0] },     // verde
-  { n: 4, c: [0,0,255] },     // azul
-  { n: 5, c: [255,255,0] },   // amarillo
-  { n: 6, c: [0,255,255] },   // celeste
-  { n: 7, c: [255,0,255] }    // magenta
-];
-
-// 📏 CONFIG
-const NUM_BARRAS = 6;
-const SCAN_HEIGHT_RATIO = 0.5; // línea al medio
-const SAMPLE_WIDTH_RATIO = 0.6; // evita bordes
-
-// 📷 Cámara
 navigator.mediaDevices.getUserMedia({ video: true })
 .then(stream => video.srcObject = stream);
 
-// 🎯 Distancia de color
-function dist(c1, c2) {
+// distancia color
+function dist(a,b){
   return Math.sqrt(
-    (c1[0]-c2[0])**2 +
-    (c1[1]-c2[1])**2 +
-    (c1[2]-c2[2])**2
+    (a[0]-b[0])**2 +
+    (a[1]-b[1])**2 +
+    (a[2]-b[2])**2
   );
 }
 
-// 🎯 Detectar número más cercano
-function detectarColor(rgb) {
+function detectar(rgb){
   let min = Infinity;
   let elegido = "?";
 
-  for (let col of colores) {
-    let d = dist(rgb, col.c);
-    if (d < min) {
+  for (let k in colores){
+    let d = dist(rgb, colores[k]);
+    if (d < min){
       min = d;
-      elegido = col.n;
+      elegido = k;
     }
   }
-
   return elegido;
 }
 
-// 🔍 Escaneo
-function scan() {
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+function scan(){
+  ctx.drawImage(video,0,0,canvas.width,canvas.height);
 
-  let y = canvas.height * SCAN_HEIGHT_RATIO;
+  let y = canvas.height/2;
 
-  // 🟥 línea guía
+  // 🔴 línea guía
   ctx.strokeStyle = "red";
-  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(0, y);
-  ctx.lineTo(canvas.width, y);
+  ctx.moveTo(0,y);
+  ctx.lineTo(canvas.width,y);
   ctx.stroke();
 
-  let anchoBarra = canvas.width / NUM_BARRAS;
   let resultado = "";
 
-  for (let i = 0; i < NUM_BARRAS; i++) {
+  let anchoEstimado = 40; // ancho promedio esperado
 
-    // 📍 centro de cada barra (clave)
-    let x = i * anchoBarra + anchoBarra / 2;
+  for (let x = 20; x < canvas.width; x += anchoEstimado){
 
-    // 🧪 pequeño muestreo (evita mezcla)
-    let sampleWidth = anchoBarra * SAMPLE_WIDTH_RATIO;
-    let startX = x - sampleWidth / 2;
+    let img = ctx.getImageData(x, y, 10, 1).data;
 
-    let img = ctx.getImageData(startX, y, sampleWidth, 1).data;
+    let r=0,g=0,b=0,c=0;
 
-    let r=0,g=0,b=0,count=0;
-
-    for (let j = 0; j < img.length; j += 4) {
-      r += img[j];
-      g += img[j+1];
-      b += img[j+2];
-      count++;
+    for (let i=0;i<img.length;i+=4){
+      r+=img[i];
+      g+=img[i+1];
+      b+=img[i+2];
+      c++;
     }
 
-    r /= count;
-    g /= count;
-    b /= count;
+    r/=c; g/=c; b/=c;
 
-    let numero = detectarColor([r,g,b]);
-    resultado += numero;
+    let val = detectar([r,g,b]);
+    resultado += val;
 
-    // 🟩 debug visual
+    // debug
     ctx.fillStyle = `rgb(${r},${g},${b})`;
-    ctx.fillRect(x-5, y-5, 10, 10);
+    ctx.fillRect(x-3,y-3,6,6);
   }
 
   output.textContent = resultado;
