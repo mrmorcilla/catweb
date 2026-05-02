@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Barcode Scanner PRO</title>
+<title>Barcode PRO v2</title>
 
 <style>
 body {
@@ -39,16 +39,11 @@ canvas {
     margin-top: 20px;
     border: 1px solid white;
 }
-
-button, input {
-    margin-top: 10px;
-    padding: 6px;
-}
 </style>
 </head>
 <body>
 
-<h2>📸 Escáner Inteligente</h2>
+<h2>📸 Escáner con sincronización</h2>
 
 <div id="contenedor">
     <video id="video" autoplay playsinline></video>
@@ -56,15 +51,15 @@ button, input {
 </div>
 
 <br>
-<button onclick="cambiarCamara()">🔄 Cambiar cámara</button>
+<button onclick="cambiarCamara()">🔄 Cámara</button>
 
-<div class="info">📡 Lectura en vivo: <span id="raw">---</span></div>
+<div class="info">📡 Lectura cruda: <span id="raw">---</span></div>
 <div class="info">🧠 Resultado estable: <span id="final">---</span></div>
 
-<input id="texto" placeholder="Ej: 010101">
+<input id="texto" placeholder="Ej: 10101">
 <button onclick="generar()">Generar</button>
 
-<canvas id="canvasCodigo" width="500" height="100"></canvas>
+<canvas id="canvasCodigo" width="600" height="100"></canvas>
 
 <script>
 let video = document.getElementById("video");
@@ -77,11 +72,10 @@ let ctxScan = canvasScan.getContext("2d");
 let usandoTrasera = true;
 let streamActual = null;
 
-// HISTORIAL
 let historial = [];
-let tiempoVentana = 2000; // ms
+let ventana = 2000;
 
-// INICIAR CÁMARA
+// iniciar camara
 async function iniciarCamara(){
     if(streamActual){
         streamActual.getTracks().forEach(t => t.stop());
@@ -107,57 +101,53 @@ function cambiarCamara(){
     iniciarCamara();
 }
 
-// COLOR
+// color
 function detectarColor(r,g,b){
     if(r>200 && g>200 && b>200) return "blanco";
-    if(r<80 && g<80 && b<80) return "negro";
+    if(r<70 && g<70 && b<70) return "negro";
     if(g>120 && r<100 && b<100) return "verde";
     return "otro";
 }
 
-// PROMEDIO
-function promedioColor(data){
+// promedio
+function promedio(data){
     let r=0,g=0,b=0;
     let total = data.length/4;
 
     for(let i=0;i<data.length;i+=4){
-        r += data[i];
-        g += data[i+1];
-        b += data[i+2];
+        r+=data[i];
+        g+=data[i+1];
+        b+=data[i+2];
     }
 
     return [r/total, g/total, b/total];
 }
 
-// CALCULAR RESULTADO ESTABLE
-function calcularPromedio(){
+// promedio estable
+function calcularFinal(){
     let ahora = Date.now();
-
-    // limpiar viejo
-    historial = historial.filter(e => ahora - e.t < tiempoVentana);
+    historial = historial.filter(e => ahora - e.t < ventana);
 
     let conteo = {};
-
     for(let e of historial){
-        conteo[e.valor] = (conteo[e.valor] || 0) + 1;
+        conteo[e.valor] = (conteo[e.valor]||0)+1;
     }
 
-    let mejor = "---";
-    let max = 0;
+    let mejor="---", max=0;
 
     for(let k in conteo){
-        if(conteo[k] > max){
-            max = conteo[k];
-            mejor = k;
+        if(conteo[k]>max){
+            max=conteo[k];
+            mejor=k;
         }
     }
 
     finalText.textContent = mejor;
 }
 
-// ESCANEO
+// escaneo
 function escanear(){
-    if(video.videoWidth === 0){
+    if(video.videoWidth===0){
         requestAnimationFrame(escanear);
         return;
     }
@@ -165,49 +155,68 @@ function escanear(){
     canvasScan.width = video.videoWidth;
     canvasScan.height = video.videoHeight;
 
-    ctxScan.drawImage(video, 0, 0);
+    ctxScan.drawImage(video,0,0);
 
     let y = canvasScan.height/2;
-    let ancho = 30;
+    let ancho = 15; // más fino 🔥
+
+    let colores = [];
+
+    for(let x=0;x<canvasScan.width;x+=ancho){
+        let data = ctxScan.getImageData(x,y,ancho,8).data;
+        let [r,g,b] = promedio(data);
+        let c = detectarColor(r,g,b);
+        colores.push(c);
+    }
+
+    // encontrar inicio y fin (verde)
+    let inicio = colores.indexOf("verde");
+    let fin = colores.lastIndexOf("verde");
 
     let resultado = "";
 
-    for(let x=0; x<canvasScan.width; x+=ancho){
-        let bloque = ctxScan.getImageData(x, y, ancho, 10).data;
-        let [r,g,b] = promedioColor(bloque);
+    if(inicio !== -1 && fin !== -1 && fin > inicio){
 
-        let color = detectarColor(r,g,b);
+        for(let i=inicio;i<=fin;i++){
+            let c = colores[i];
 
-        if(color === "negro") resultado += "0";
-        if(color === "verde") resultado += "1";
+            if(c === "negro") resultado += "0";
+            if(c === "verde") resultado += "1";
+        }
     }
 
     rawText.textContent = resultado || "---";
 
     if(resultado){
-        historial.push({
-            valor: resultado,
-            t: Date.now()
-        });
+        historial.push({valor:resultado,t:Date.now()});
     }
 
-    calcularPromedio();
+    calcularFinal();
 
     requestAnimationFrame(escanear);
 }
 
 video.addEventListener("play", escanear);
 
-// GENERADOR
+// generador
 function generar(){
     let texto = document.getElementById("texto").value;
     let canvas = document.getElementById("canvasCodigo");
     let ctx = canvas.getContext("2d");
 
-    let ancho = 30;
+    let ancho = 15;
     let x = 0;
 
     ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    // inicio verde obligatorio 🔥
+    ctx.fillStyle = "green";
+    ctx.fillRect(x,0,ancho,canvas.height);
+    x += ancho;
+
+    ctx.fillStyle = "white";
+    ctx.fillRect(x,0,ancho,canvas.height);
+    x += ancho;
 
     for(let char of texto){
         let color;
@@ -217,18 +226,18 @@ function generar(){
         else continue;
 
         ctx.fillStyle = color;
-        ctx.fillRect(x, 0, ancho, canvas.height);
-
+        ctx.fillRect(x,0,ancho,canvas.height);
         x += ancho;
 
         ctx.fillStyle = "white";
-        ctx.fillRect(x, 0, ancho, canvas.height);
-
+        ctx.fillRect(x,0,ancho,canvas.height);
         x += ancho;
     }
-}
 
-iniciarCamara();
+    // fin verde 🔥
+    ctx.fillStyle = "green";
+    ctx.fillRect(x,0,ancho,canvas.height);
+}
 </script>
 
 </body>
