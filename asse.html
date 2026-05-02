@@ -2,52 +2,67 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>MiniCode Scanner</title>
+<title>MiniCode Scanner PRO</title>
+
 <style>
   body {
+    margin: 0;
     font-family: Arial;
     text-align: center;
-    background: #111;
+    background: #000;
     color: white;
   }
 
-  canvas {
-    border: 4px solid white;
+  h1 {
     margin: 10px;
   }
 
-  video {
-    width: 300px;
-    border: 3px solid white;
-  }
-
   input {
-    padding: 10px;
-    font-size: 18px;
-    width: 120px;
+    padding: 12px;
+    font-size: 20px;
+    width: 160px;
     text-align: center;
   }
 
   button {
-    padding: 10px;
+    padding: 12px;
+    font-size: 18px;
     margin: 5px;
-    font-size: 16px;
+  }
+
+  canvas {
+    width: 90vw;
+    max-width: 400px;
+    height: auto;
+    border: 4px solid white;
+  }
+
+  video {
+    width: 100vw;
+    height: auto;
+    max-height: 60vh;
+    object-fit: cover;
+  }
+
+  #resultado {
+    font-size: 24px;
+    margin: 10px;
   }
 </style>
 </head>
 <body>
 
-<h1>MiniCode (tu QR simple)</h1>
+<h1>MiniCode</h1>
 
 <input id="input" maxlength="6" placeholder="123456">
 <br>
 <button onclick="generar()">Generar</button>
 
 <br>
-<canvas id="code" width="200" height="200"></canvas>
+<canvas id="code" width="400" height="400"></canvas>
 
 <h2>Scanner</h2>
-<video id="video" autoplay></video>
+<video id="video" autoplay playsinline></video>
 <br>
 <button onclick="startCamera()">Activar cámara</button>
 
@@ -56,6 +71,8 @@
 <script>
 const canvas = document.getElementById("code");
 const ctx = canvas.getContext("2d");
+
+// ================= GENERADOR =================
 
 function generar() {
   let val = document.getElementById("input").value;
@@ -75,7 +92,7 @@ function generar() {
 }
 
 function draw(bits) {
-  const size = 8; // grilla 8x8
+  const size = 8;
   const cell = canvas.width / size;
 
   ctx.fillStyle = "white";
@@ -86,7 +103,7 @@ function draw(bits) {
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
 
-      // borde negro
+      // borde
       if (x === 0 || y === 0 || x === size-1 || y === size-1) {
         ctx.fillStyle = "black";
       } else {
@@ -108,14 +125,19 @@ function draw(bits) {
 const video = document.getElementById("video");
 
 function startCamera() {
-  navigator.mediaDevices.getUserMedia({ video: true })
-    .then(stream => video.srcObject = stream);
+  navigator.mediaDevices.getUserMedia({
+    video: {
+      facingMode: { ideal: "environment" } // 📱 cámara trasera
+    }
+  })
+  .then(stream => video.srcObject = stream)
+  .catch(err => alert("No se pudo acceder a la cámara"));
 }
 
 const scanCanvas = document.createElement("canvas");
 const scanCtx = scanCanvas.getContext("2d");
 
-setInterval(scan, 500);
+setInterval(scan, 400);
 
 function scan() {
   if (!video.videoWidth) return;
