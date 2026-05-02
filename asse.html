@@ -103,7 +103,7 @@ function draw(bits) {
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
 
-      // borde
+      // borde grueso
       if (x === 0 || y === 0 || x === size-1 || y === size-1) {
         ctx.fillStyle = "black";
       } else {
@@ -127,17 +127,17 @@ const video = document.getElementById("video");
 function startCamera() {
   navigator.mediaDevices.getUserMedia({
     video: {
-      facingMode: { ideal: "environment" } // 📱 cámara trasera
+      facingMode: { ideal: "environment" }
     }
   })
   .then(stream => video.srcObject = stream)
-  .catch(err => alert("No se pudo acceder a la cámara"));
+  .catch(() => alert("No se pudo acceder a la cámara"));
 }
 
 const scanCanvas = document.createElement("canvas");
 const scanCtx = scanCanvas.getContext("2d");
 
-setInterval(scan, 400);
+setInterval(scan, 300);
 
 function scan() {
   if (!video.videoWidth) return;
@@ -147,36 +147,63 @@ function scan() {
 
   scanCtx.drawImage(video, 0, 0);
 
+  // 🔲 área central (solo escaneamos esto)
+  let boxSize = Math.min(scanCanvas.width, scanCanvas.height) * 0.5;
+  let startX = (scanCanvas.width - boxSize) / 2;
+  let startY = (scanCanvas.height - boxSize) / 2;
+
   let size = 8;
   let bits = "";
 
-  let stepX = scanCanvas.width / size;
-  let stepY = scanCanvas.height / size;
+  let step = boxSize / size;
 
   for (let y = 1; y < size-1; y++) {
     for (let x = 1; x < size-1; x++) {
 
-      let px = Math.floor(x * stepX + stepX/2);
-      let py = Math.floor(y * stepY + stepY/2);
+      let px = Math.floor(startX + x * step);
+      let py = Math.floor(startY + y * step);
 
-      let data = scanCtx.getImageData(px, py, 1, 1).data;
+      // 🧠 promedio de píxeles (5x5)
+      let total = 0;
+      let count = 0;
 
-      let brightness = (data[0] + data[1] + data[2]) / 3;
+      for (let dx = -2; dx <= 2; dx++) {
+        for (let dy = -2; dy <= 2; dy++) {
 
-      bits += brightness < 128 ? "1" : "0";
+          let data = scanCtx.getImageData(px+dx, py+dy, 1, 1).data;
+          let brightness = (data[0] + data[1] + data[2]) / 3;
+
+          total += brightness;
+          count++;
+        }
+      }
+
+      let avg = total / count;
+
+      bits += avg < 128 ? "1" : "0";
     }
   }
 
   if (bits.length >= 24) {
     let nums = [];
+    let valid = true;
 
     for (let i = 0; i < 24; i += 4) {
       let chunk = bits.slice(i, i+4);
-      nums.push(parseInt(chunk, 2));
+      let num = parseInt(chunk, 2);
+
+      if (num > 9) {
+        valid = false;
+        break;
+      }
+
+      nums.push(num);
     }
 
-    document.getElementById("resultado").innerText =
-      "Detectado: " + nums.join("");
+    if (valid) {
+      document.getElementById("resultado").innerText =
+        "Detectado: " + nums.join("");
+    }
   }
 }
 </script>
