@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>ColorCode Pro v3</title>
+<title>ColorCode Pro v4</title>
 
 <style>
 body {
@@ -27,7 +27,7 @@ canvas, video {
 
 <body>
 
-<h1>🎨 ColorCode Pro v3</h1>
+<h1>🎨 ColorCode Pro v4</h1>
 
 <button onclick="modo='generar'">Modo Generar</button>
 <button onclick="modo='scan'; iniciarCamara()">Modo Escanear</button>
@@ -53,14 +53,6 @@ canvas, video {
 let modo = "generar";
 
 // ---------------- COLORES ----------------
-const colores = {
-  rojo: [255,0,0],
-  verde: [0,255,0],
-  azul: [0,0,255],
-  negro: [0,0,0],
-  blanco: [255,255,255]
-};
-
 const coloresHex = {
   rojo: "#ff0000",
   verde: "#00ff00",
@@ -140,37 +132,28 @@ async function iniciarCamara(){
   requestAnimationFrame(scanFrame);
 }
 
-// distancia con ventaja a oscuro
-function dist(c1, c2){
-  let d = Math.sqrt(
-    (c1[0]-c2[0])**2 +
-    (c1[1]-c2[1])**2 +
-    (c1[2]-c2[2])**2
-  );
-
-  let brillo = (c1[0]+c1[1]+c1[2])/3;
-  if (brillo < 80) d *= 0.7;
-
-  return d;
-}
-
-// detectar color
+// ---------------- DETECCIÓN ROBUSTA ----------------
 function detectarColor(r,g,b){
-  let mejor = null;
-  let min = 999999;
 
-  for (let nombre in colores){
-    let d = dist([r,g,b], colores[nombre]);
-    if (d < min){
-      min = d;
-      mejor = nombre;
-    }
+  let brillo = (r+g+b)/3;
+
+  // negro
+  if (brillo < 60) return "negro";
+
+  // blanco
+  if (brillo > 200 && Math.abs(r-g)<40 && Math.abs(r-b)<40 && Math.abs(g-b)<40){
+    return "blanco";
   }
 
-  return mejor;
+  // dominante
+  if (r > g && r > b) return "rojo";
+  if (g > r && g > b) return "verde";
+  if (b > r && b > g) return "azul";
+
+  return "negro";
 }
 
-// predicción estable
+// ---------------- PREDICCIÓN ----------------
 function predecir(){
   let freq = {};
 
@@ -197,6 +180,11 @@ function scanFrame(){
 
   const video = document.getElementById("video");
 
+  if (video.videoWidth === 0) {
+    requestAnimationFrame(scanFrame);
+    return;
+  }
+
   const temp = document.createElement("canvas");
   temp.width = video.videoWidth;
   temp.height = video.videoHeight;
@@ -210,7 +198,7 @@ function scanFrame(){
   let coloresLeidos = [];
   let buffer = [];
 
-  const paso = 10;
+  const paso = 4; // escaneo fino
 
   for (let x=0; x<temp.width; x+=paso){
 
@@ -231,7 +219,9 @@ function scanFrame(){
 
     let nombre = detectarColor(r,g,b);
 
-    // buffer anti-ruido
+    console.log(nombre); // debug consola
+
+    // buffer anti ruido
     buffer.push(nombre);
     if (buffer.length > 3) buffer.shift();
 
@@ -244,6 +234,10 @@ function scanFrame(){
       coloresLeidos.push(nombre);
     }
   }
+
+  // DEBUG VISUAL
+  document.getElementById("output").innerHTML =
+    "Colores detectados:<br>" + coloresLeidos.join(" - ");
 
   let texto = "";
 
@@ -266,14 +260,12 @@ function scanFrame(){
         datos.push(coloresLeidos[j]);
       }
 
-      // limpiar duplicados
       let limpio = [];
       for (let k=0;k<datos.length;k++){
         if (k>0 && datos[k] === datos[k-1]) continue;
         limpio.push(datos[k]);
       }
 
-      // decodificar
       for (let k=0;k<limpio.length;k+=2){
         let clave = limpio[k] + "-" + limpio[k+1];
         if (diccionario[clave]){
@@ -292,9 +284,9 @@ function scanFrame(){
 
   let pred = predecir();
 
-  document.getElementById("output").innerHTML =
-    "📷 Lectura: " + texto +
-    "<br><span style='color:#00aaff'>🧠 Predicción: " + pred + "</span>";
+  document.getElementById("output").innerHTML +=
+    "<br><br>📷 Lectura: " + texto +
+    "<br>🧠 Predicción: " + pred;
 
   requestAnimationFrame(scanFrame);
 }
