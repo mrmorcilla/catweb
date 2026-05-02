@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Barcode PRO v2</title>
+<title>Barcode PRO v3</title>
 
 <style>
 body {
@@ -32,7 +32,6 @@ body {
 
 .info {
     margin-top: 10px;
-    font-size: 18px;
 }
 
 canvas {
@@ -43,7 +42,7 @@ canvas {
 </head>
 <body>
 
-<h2>📸 Escáner con sincronización</h2>
+<h2>📸 Escáner PRO (estable)</h2>
 
 <div id="contenedor">
     <video id="video" autoplay playsinline></video>
@@ -53,8 +52,8 @@ canvas {
 <br>
 <button onclick="cambiarCamara()">🔄 Cámara</button>
 
-<div class="info">📡 Lectura cruda: <span id="raw">---</span></div>
-<div class="info">🧠 Resultado estable: <span id="final">---</span></div>
+<div class="info">📡 Lectura: <span id="raw">---</span></div>
+<div class="info">🧠 Estable: <span id="final">---</span></div>
 
 <input id="texto" placeholder="Ej: 10101">
 <button onclick="generar()">Generar</button>
@@ -69,13 +68,13 @@ let finalText = document.getElementById("final");
 let canvasScan = document.createElement("canvas");
 let ctxScan = canvasScan.getContext("2d");
 
-let usandoTrasera = true;
 let streamActual = null;
+let usandoTrasera = true;
 
 let historial = [];
 let ventana = 2000;
 
-// iniciar camara
+// cámara
 async function iniciarCamara(){
     if(streamActual){
         streamActual.getTracks().forEach(t => t.stop());
@@ -89,7 +88,7 @@ async function iniciarCamara(){
         });
         streamActual = stream;
         video.srcObject = stream;
-    } catch(e){
+    } catch {
         let stream = await navigator.mediaDevices.getUserMedia({ video: true });
         streamActual = stream;
         video.srcObject = stream;
@@ -101,11 +100,20 @@ function cambiarCamara(){
     iniciarCamara();
 }
 
-// color
+// DETECCIÓN ROBUSTA
 function detectarColor(r,g,b){
+
+    // blanco
     if(r>200 && g>200 && b>200) return "blanco";
-    if(r<70 && g<70 && b<70) return "negro";
-    if(g>120 && r<100 && b<100) return "verde";
+
+    // negro
+    if(r<60 && g<60 && b<60) return "negro";
+
+    // rojo dominante 🔴
+    if(r > g*1.5 && r > b*1.5 && r > 100){
+        return "rojo";
+    }
+
     return "otro";
 }
 
@@ -123,12 +131,13 @@ function promedio(data){
     return [r/total, g/total, b/total];
 }
 
-// promedio estable
+// resultado estable
 function calcularFinal(){
     let ahora = Date.now();
     historial = historial.filter(e => ahora - e.t < ventana);
 
     let conteo = {};
+
     for(let e of historial){
         conteo[e.valor] = (conteo[e.valor]||0)+1;
     }
@@ -158,20 +167,20 @@ function escanear(){
     ctxScan.drawImage(video,0,0);
 
     let y = canvasScan.height/2;
-    let ancho = 15; // más fino 🔥
+    let ancho = 14;
 
     let colores = [];
 
     for(let x=0;x<canvasScan.width;x+=ancho){
         let data = ctxScan.getImageData(x,y,ancho,8).data;
         let [r,g,b] = promedio(data);
+
         let c = detectarColor(r,g,b);
         colores.push(c);
     }
 
-    // encontrar inicio y fin (verde)
-    let inicio = colores.indexOf("verde");
-    let fin = colores.lastIndexOf("verde");
+    let inicio = colores.indexOf("rojo");
+    let fin = colores.lastIndexOf("rojo");
 
     let resultado = "";
 
@@ -181,7 +190,7 @@ function escanear(){
             let c = colores[i];
 
             if(c === "negro") resultado += "0";
-            if(c === "verde") resultado += "1";
+            if(c === "rojo") resultado += "1";
         }
     }
 
@@ -204,38 +213,38 @@ function generar(){
     let canvas = document.getElementById("canvasCodigo");
     let ctx = canvas.getContext("2d");
 
-    let ancho = 15;
+    let ancho = 14;
     let x = 0;
 
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    // inicio verde obligatorio 🔥
-    ctx.fillStyle = "green";
+    // inicio rojo
+    ctx.fillStyle = "red";
     ctx.fillRect(x,0,ancho,canvas.height);
-    x += ancho;
+    x+=ancho;
 
     ctx.fillStyle = "white";
     ctx.fillRect(x,0,ancho,canvas.height);
-    x += ancho;
+    x+=ancho;
 
     for(let char of texto){
         let color;
 
-        if(char === "0") color = "black";
-        else if(char === "1") color = "green";
+        if(char === "0") color="black";
+        else if(char === "1") color="red";
         else continue;
 
-        ctx.fillStyle = color;
+        ctx.fillStyle=color;
         ctx.fillRect(x,0,ancho,canvas.height);
-        x += ancho;
+        x+=ancho;
 
-        ctx.fillStyle = "white";
+        ctx.fillStyle="white";
         ctx.fillRect(x,0,ancho,canvas.height);
-        x += ancho;
+        x+=ancho;
     }
 
-    // fin verde 🔥
-    ctx.fillStyle = "green";
+    // fin rojo
+    ctx.fillStyle="red";
     ctx.fillRect(x,0,ancho,canvas.height);
 }
 </script>
