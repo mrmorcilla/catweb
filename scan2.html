@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Scanner Code</title>
+
+<style>
+html, body {
+    margin: 0;
+    background: black;
+    overflow: hidden;
+    font-family: Arial;
+}
+
+video {
+    position: fixed;
+    width: 100vw;
+    height: 100vh;
+    object-fit: cover;
+}
+
+#overlay {
+    position: fixed;
+    width: 100%;
+    height: 100%;
+}
+
+#line {
+    position: absolute;
+    top: 50%;
+    width: 100%;
+    height: 3px;
+    background: cyan;
+}
+
+#box {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%,-50%);
+    background: rgba(0,0,0,0.85);
+    color: white;
+    padding: 25px 40px;
+    border-radius: 15px;
+    display: none;
+    text-align: center;
+}
+
+#text {
+    font-size: 28px;
+}
+
+button {
+    margin-top: 10px;
+    padding: 8px 14px;
+    font-size: 16px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+}
+</style>
+</head>
+<body>
+
+<video id="video" autoplay playsinline></video>
+<canvas id="scan" width="640" height="480" style="display:none;"></canvas>
+
+<div id="overlay">
+    <div id="line"></div>
+
+    <div id="box">
+        <div id="text"></div>
+        <button onclick="reset()">Escanear otra vez</button>
+    </div>
+</div>
+
+<script>
+
+const ABC = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ./?&=";
+
+function binToText(bin) {
+    let out = "";
+
+    for (let i=0;i<bin.length;i+=6) {
+        let chunk = bin.slice(i,i+6);
+        if (chunk.length < 6) continue;
+
+        let idx = parseInt(chunk,2);
+        out += ABC[idx] ?? "";
+    }
+
+    return out;
+}
+
+// cámara
+navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: "environment" } }
+}).then(s => video.srcObject = s);
+
+// detección
+function isGreen(r,g,b){ return g>120 && r<120 && b<120; }
+function isBlack(r,g,b){ return r<70 && g<70 && b<70; }
+function isRed(r,g,b){ return r>130 && g<100 && b<100; }
+function isWhite(r,g,b){ return r>180 && g>180 && b>180; }
+
+const video = document.getElementById("video");
+const canvas = document.getElementById("scan");
+const ctx = canvas.getContext("2d");
+
+const box = document.getElementById("box");
+const text = document.getElementById("text");
+
+let historial = [];
+let startTime = null;
+let done = false;
+
+function scan() {
+    if (done) return;
+
+    ctx.drawImage(video,0,0,canvas.width,canvas.height);
+
+    let y = canvas.height/2|0;
+    let img = ctx.getImageData(0,y,canvas.width,1).data;
+
+    let center = canvas.width/2|0;
+
+    // buscar verde
+    let start = -1;
+    for (let x=center;x>=0;x--) {
+        let i=x*4;
+        if (isGreen(img[i],img[i+1],img[i+2])) {
+            start=x;
+            break;
+        }
+    }
+
+    if (start === -1) {
+        requestAnimationFrame(scan);
+        return;
+    }
+
+    let bits = "";
+    let last = null;
+    let reading = false;
+
+    for (let x=start;x<canvas.width;x++) {
+        let i=x*4;
+        let r=img[i], g=img[i+1], b=img[i+2];
+
+        let c = null;
+
+        if (isGreen(r,g,b)) {
+            if (reading) break;
+        }
+        else if (isBlack(r,g,b)) c="sep";
+        else if (isRed(r,g,b)) c="1";
+        else if (isWhite(r,g,b)) c="0";
+
+        if (!c) continue;
+
+        if (c !== last) {
+            if (c==="1"){ bits+="1"; reading=true; }
+            if (c==="0"){ bits+="0"; reading=true; }
+            last=c;
+        }
+    }
+
+    if (bits.length > 0) {
+        if (!startTime) startTime = Date.now();
+
+        historial.push(bits);
+        if (historial.length > 25) historial.shift();
+
+        if (Date.now() - startTime > 3000) {
+            let count = {};
+
+            for (let b of historial) {
+                count[b] = (count[b]||0)+1;
+            }
+
+            let best = Object.entries(count)
+                .sort((a,b)=>b[1]-a[1])[0][0];
+
+            let finalText = binToText(best);
+
+            text.innerText = finalText || best;
+            box.style.display = "block";
+            done = true;
+            return;
+        }
+    }
+
+    requestAnimationFrame(scan);
+}
+
+function reset() {
+    historial = [];
+    startTime = null;
+    done = false;
+    box.style.display = "none";
+    scan();
+}
+
+video.addEventListener("play", scan);
+</script>
+
+</body>
+</html>
