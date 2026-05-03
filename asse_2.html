@@ -2,18 +2,18 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>ColorCode Preciso</title>
+<title>ColorCode Final</title>
 
 <style>
 body {
     background: #f5f5f5;
-    color: black;
+    color: #111;
     text-align: center;
-    font-family: Arial;
+    font-family: Arial, sans-serif;
 }
 
 video, canvas {
-    border: 2px solid black;
+    border: 2px solid #111;
     margin-top: 10px;
 }
 
@@ -23,32 +23,24 @@ input, button {
     font-size: 16px;
 }
 
-#raw {
-    font-size: 18px;
-    margin-top: 10px;
-}
-
-#final {
-    font-size: 26px;
-    margin-top: 5px;
-    color: green;
-}
+#raw { margin-top: 10px; font-size: 18px; }
+#final { margin-top: 5px; font-size: 26px; color: green; }
 </style>
 </head>
 <body>
 
-<h2>🧪 Generador + Scanner Estable</h2>
+<h2>Generador + Scanner estable</h2>
 
 <input id="input" placeholder="Ej: 10100">
 <button onclick="generar()">Generar</button>
 
 <br>
-<canvas id="codigo" width="500" height="100"></canvas>
+<canvas id="codigo" width="520" height="100"></canvas>
 
 <br>
 
-<video id="video" width="500" height="300" autoplay></video>
-<canvas id="scan" width="500" height="300"></canvas>
+<video id="video" width="520" height="300" autoplay playsinline></video>
+<canvas id="scan" width="520" height="300"></canvas>
 
 <div id="raw">Lectura actual: -</div>
 <div id="final">Promedio: -</div>
@@ -64,7 +56,7 @@ function generar() {
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
     let x = 20;
-    const w = 20;
+    const w = 22;
 
     function draw(color) {
         ctx.fillStyle = color;
@@ -76,9 +68,7 @@ function generar() {
 
     for (let bit of texto) {
         draw("black"); // separador
-
-        if (bit === "1") draw("red");
-        else draw("white");
+        draw(bit === "1" ? "red" : "white");
     }
 
     draw("black");
@@ -93,23 +83,37 @@ const ctx = canvasScan.getContext("2d");
 const rawText = document.getElementById("raw");
 const finalText = document.getElementById("final");
 
-navigator.mediaDevices.getUserMedia({ video: true })
-.then(s => video.srcObject = s)
-.catch(() => alert("Error cámara"));
+// cámara trasera con fallback
+async function iniciarCamara() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" } }
+        });
+        video.srcObject = stream;
+    } catch (e) {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = stream;
+        } catch {
+            alert("No se pudo abrir la cámara");
+        }
+    }
+}
 
-// detección flexible (no exacta)
-function esVerde(r,g,b){ return g > 120 && r < 100 && b < 100; }
-function esNegro(r,g,b){ return r < 70 && g < 70 && b < 70; }
-function esRojo(r,g,b){ return r > 120 && g < 100 && b < 100; }
-function esBlanco(r,g,b){ return r > 180 && g > 180 && b > 180; }
+iniciarCamara();
 
-// historial para promedio
+// detección flexible
+function esVerde(r,g,b){ return g>120 && r<120 && b<120; }
+function esNegro(r,g,b){ return r<70 && g<70 && b<70; }
+function esRojo(r,g,b){ return r>130 && g<100 && b<100; }
+function esBlanco(r,g,b){ return r>180 && g>180 && b>180; }
+
 let historial = [];
 
 function escanear() {
     ctx.drawImage(video,0,0,canvasScan.width,canvasScan.height);
 
-    const y = canvasScan.height / 2 | 0;
+    const y = (canvasScan.height/2)|0;
     const img = ctx.getImageData(0,y,canvasScan.width,1).data;
 
     // línea guía
@@ -119,7 +123,7 @@ function escanear() {
     ctx.lineTo(canvasScan.width,y);
     ctx.stroke();
 
-    let centro = canvasScan.width / 2 | 0;
+    const centro = (canvasScan.width/2)|0;
 
     // buscar verde
     let start = -1;
@@ -157,36 +161,35 @@ function escanear() {
 
         if (!color) continue;
 
-        // 🔥 CLAVE: solo cambios de color
+        // 🔥 solo cambios de color
         if (color !== lastColor) {
-
             if (color === "1") {
                 bits += "1";
                 leyendo = true;
             }
-
             if (color === "0") {
                 bits += "0";
                 leyendo = true;
             }
-
             lastColor = color;
         }
     }
 
     rawText.innerText = "Lectura actual: " + (bits || "-");
 
-    // promedio por frecuencia
+    // promedio por estabilidad
     if (bits.length > 0) {
         historial.push(bits);
-        if (historial.length > 20) historial.shift();
+        if (historial.length > 25) historial.shift();
 
         let conteo = {};
         for (let b of historial) {
             conteo[b] = (conteo[b]||0)+1;
         }
 
-        let mejor = Object.entries(conteo).sort((a,b)=>b[1]-a[1])[0];
+        let mejor = Object.entries(conteo)
+            .sort((a,b)=>b[1]-a[1])[0];
+
         finalText.innerText = "Promedio: " + (mejor ? mejor[0] : "-");
     }
 
