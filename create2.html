@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Create Code</title>
+
+<style>
+body {
+    background: #f0f0f0;
+    font-family: Arial;
+    text-align: center;
+    padding-top: 30px;
+}
+
+input {
+    width: 420px;
+    font-size: 18px;
+    padding: 10px;
+}
+
+button {
+    font-size: 18px;
+    padding: 10px 18px;
+    margin-left: 10px;
+}
+
+canvas {
+    margin-top: 30px;
+    border: 2px solid black;
+}
+</style>
+</head>
+<body>
+
+<h2>🖥️ Generador de Código Binario</h2>
+
+<input id="input" placeholder="Ej: HOLA 123">
+<button onclick="generar()">Generar</button>
+
+<br>
+<canvas id="canvas" width="1000" height="150"></canvas>
+
+<script>
+// 42 símbolos (6 bits)
+const ABC = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ./?&=";
+
+// texto → binario
+function toBinary(text) {
+    text = text.toUpperCase();
+    let bin = "";
+
+    for (let c of text) {
+        let i = ABC.indexOf(c);
+        if (i === -1) continue;
+        bin += i.toString(2).padStart(6,"0");
+    }
+
+    return bin;
+}
+
+function generar() {
+    const text = document.getElementById("input").value;
+    const bin = toBinary(text);
+
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    ctx.fillStyle = "white";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    let total = 2 + bin.length * 2 + 1;
+    let w = Math.max(2, Math.floor(canvas.width / total));
+
+    let x = 0;
+
+    function draw(color){
+        ctx.fillStyle = color;
+        ctx.fillRect(x, 30, w, 90);
+        x += w;
+    }
+
+    draw("green"); // inicio
+
+    for (let b of bin) {
+        draw("black"); // separador
+        draw(b === "1" ? "red" : "white");
+    }
+
+    draw("black");
+    draw("green"); // fin
+}
+</script>
+
+</body>
+</html>
