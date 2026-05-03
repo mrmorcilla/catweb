@@ -15,7 +15,7 @@ body {
 input {
     font-size: 20px;
     padding: 10px;
-    width: 200px;
+    width: 300px;
 }
 
 button {
@@ -34,11 +34,11 @@ canvas {
 
 <h2>Generador de Código</h2>
 
-<input id="input" placeholder="Ej: 10100">
+<input id="input" placeholder="Ej: 101001011010">
 <button onclick="generar()">Generar</button>
 
 <br>
-<canvas id="canvas" width="800" height="150"></canvas>
+<canvas id="canvas" width="1000" height="150"></canvas>
 
 <script>
 function generar() {
@@ -49,13 +49,18 @@ function generar() {
     ctx.fillStyle="white";
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    let x=30;
-    const w=30;
+    // cantidad total de bloques
+    let bloques = 2 + (texto.length * 2) + 1;
+
+    // 🔥 ancho dinámico mínimo
+    let w = Math.max(2, Math.floor(canvas.width / bloques));
+
+    let x = 0;
 
     function draw(color){
         ctx.fillStyle=color;
         ctx.fillRect(x,30,w,90);
-        x+=w;
+        x += w;
     }
 
     draw("green");
