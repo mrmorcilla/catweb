@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Generador</title>
+
+<style>
+body {
+    background: #f0f0f0;
+    font-family: Arial;
+    text-align: center;
+    padding-top: 40px;
+}
+
+input {
+    font-size: 20px;
+    padding: 10px;
+    width: 200px;
+}
+
+button {
+    font-size: 18px;
+    padding: 10px 20px;
+    margin-left: 10px;
+}
+
+canvas {
+    margin-top: 30px;
+    border: 2px solid black;
+}
+</style>
+</head>
+<body>
+
+<h2>Generador de Código</h2>
+
+<input id="input" placeholder="Ej: 10100">
+<button onclick="generar()">Generar</button>
+
+<br>
+<canvas id="canvas" width="800" height="150"></canvas>
+
+<script>
+function generar() {
+    const texto = document.getElementById("input").value;
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    ctx.fillStyle="white";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    let x=30;
+    const w=30;
+
+    function draw(color){
+        ctx.fillStyle=color;
+        ctx.fillRect(x,30,w,90);
+        x+=w;
+    }
+
+    draw("green");
+
+    for(let bit of texto){
+        draw("black");
+        draw(bit==="1"?"red":"white");
+    }
+
+    draw("black");
+    draw("green");
+}
+</script>
+
+</body>
+</html>
