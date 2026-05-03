@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Scanner 2D</title>
+
+<style>
+html, body {
+    margin: 0;
+    background: black;
+    overflow: hidden;
+}
+
+video {
+    position: fixed;
+    width: 100vw;
+    height: 100vh;
+    object-fit: cover;
+}
+
+#box {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%,-50%);
+    background: rgba(0,0,0,0.85);
+    color: white;
+    padding: 25px;
+    border-radius: 12px;
+    display: none;
+    font-family: Arial;
+    text-align: center;
+}
+</style>
+</head>
+<body>
+
+<video id="video" autoplay playsinline></video>
+<canvas id="c" width="640" height="480" style="display:none;"></canvas>
+
+<div id="box"></div>
+
+<script>
+
+const ABC = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ./?&=";
+
+function binToText(b){
+    let out="";
+    for(let i=0;i<b.length;i+=6){
+        let c=b.slice(i,i+6);
+        if(c.length<6) continue;
+        let n=parseInt(c,2);
+        out += ABC[n] ?? "";
+    }
+    return out;
+}
+
+// cámara
+navigator.mediaDevices.getUserMedia({
+    video:{ facingMode:{ ideal:"environment" } }
+}).then(s=>video.srcObject=s);
+
+const video=document.getElementById("video");
+const canvas=document.getElementById("c");
+const ctx=canvas.getContext("2d");
+
+const box=document.getElementById("box");
+
+function green(r,g,b){return g>120 && r<120 && b<120;}
+function blue(r,g,b){return b>120 && r<120 && g<120;}
+function black(r,g,b){return r<70 && g<70 && b<70;}
+function red(r,g,b){return r>130 && g<100 && b<100;}
+function white(r,g,b){return r>180 && g>180 && b>180;}
+
+let done=false;
+
+function scan(){
+    if(done) return;
+
+    ctx.drawImage(video,0,0,canvas.width,canvas.height);
+
+    const midY1 = canvas.height*0.33|0;
+    const midY2 = canvas.height*0.66|0;
+
+    let img1 = ctx.getImageData(0,midY1,canvas.width,1).data;
+    let img2 = ctx.getImageData(0,midY2,canvas.width,1).data;
+
+    let bins="";
+
+    function readLine(img, startColorFn){
+
+        let start=-1;
+
+        for(let x=canvas.width/2|0;x>=0;x--){
+            let i=x*4;
+            if(startColorFn(img[i],img[i+1],img[i+2])){
+                start=x;
+                break;
+            }
+        }
+
+        if(start===-1) return "";
+
+        let bits="";
+        let last=null;
+        let reading=false;
+
+        for(let x=start;x<canvas.width;x++){
+            let i=x*4;
+            let r=img[i],g=img[i+1],b=img[i+2];
+
+            let c=null;
+
+            if(black(r,g,b)) c="sep";
+            else if(red(r,g,b)) c="1";
+            else if(white(r,g,b)) c="0";
+
+            if(!c) continue;
+
+            if(c!==last){
+                if(c==="1"){bits+="1";reading=true;}
+                if(c==="0"){bits+="0";reading=true;}
+                last=c;
+            }
+        }
+
+        return bits;
+    }
+
+    bins += readLine(img1,green);
+    bins += readLine(img2,blue);
+
+    if(bins.length>20){
+        let text = binToText(bins);
+        box.innerText = text;
+        box.style.display="block";
+        done=true;
+        return;
+    }
+
+    requestAnimationFrame(scan);
+}
+
+video.addEventListener("play",scan);
+</script>
+
+</body>
+</html>
