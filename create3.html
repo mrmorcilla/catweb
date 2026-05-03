@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Create 2D Code</title>
+
+<style>
+body {
+    background: #f0f0f0;
+    font-family: Arial;
+    text-align: center;
+    padding-top: 30px;
+}
+
+input {
+    width: 400px;
+    font-size: 18px;
+    padding: 10px;
+}
+
+button {
+    font-size: 18px;
+    padding: 10px 18px;
+    margin-left: 10px;
+}
+
+canvas {
+    margin-top: 25px;
+    border: 2px solid black;
+}
+</style>
+</head>
+<body>
+
+<h2>🧩 Generador 2 Pisos</h2>
+
+<input id="input" placeholder="Ej: HOLA 123">
+<button onclick="generar()">Generar</button>
+
+<br>
+<canvas id="canvas" width="1000" height="250"></canvas>
+
+<script>
+
+const ABC = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ./?&=";
+
+function toBin(t){
+    t = t.toUpperCase();
+    let b = "";
+    for(let c of t){
+        let i = ABC.indexOf(c);
+        if(i === -1) continue;
+        b += i.toString(2).padStart(6,"0");
+    }
+    return b;
+}
+
+function generar(){
+    const text = document.getElementById("input").value;
+    const bin = toBin(text);
+
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    ctx.fillStyle = "white";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    const rows = 2;
+    const rowH = 100;
+    const startY = 20;
+
+    let totalBlocks = bin.length + bin.length + 4;
+    let w = Math.max(2, Math.floor(canvas.width / (bin.length/2)));
+
+    let x = 0;
+    let y = startY;
+
+    let i = 0;
+
+    function draw(color){
+        ctx.fillStyle = color;
+        ctx.fillRect(x,y,w,rowH);
+        x += w;
+    }
+
+    // 🔥 piso 1
+    draw("green");
+
+    for(; i < bin.length/2; i++){
+        draw("black");
+        draw(bin[i]==="1" ? "red" : "white");
+    }
+
+    // salto piso 2
+    y = startY + rowH + 20;
+    x = 0;
+
+    draw("blue");
+
+    for(; i < bin.length; i++){
+        draw("black");
+        draw(bin[i]==="1" ? "red" : "white");
+    }
+
+    draw("blue");
+}
+</script>
+
+</body>
+</html>
