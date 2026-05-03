@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Scanner</title>
+
+<style>
+html, body {
+    margin: 0;
+    padding: 0;
+    background: black;
+    overflow: hidden;
+    font-family: Arial;
+}
+
+video {
+    position: fixed;
+    width: 100vw;
+    height: 100vh;
+    object-fit: cover;
+}
+
+canvas {
+    display: none;
+}
+
+#overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+#line {
+    position: absolute;
+    top: 50%;
+    width: 100%;
+    height: 3px;
+    background: cyan;
+}
+
+#resultBox {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.85);
+    color: white;
+    padding: 30px 50px;
+    border-radius: 15px;
+    font-size: 32px;
+    display: none;
+}
+</style>
+</head>
+<body>
+
+<video id="video" autoplay playsinline></video>
+<canvas id="scan" width="640" height="480"></canvas>
+
+<div id="overlay">
+    <div id="line"></div>
+    <div id="resultBox"></div>
+</div>
+
+<script>
+const video = document.getElementById("video");
+const canvas = document.getElementById("scan");
+const ctx = canvas.getContext("2d");
+const resultBox = document.getElementById("resultBox");
+
+let historial = [];
+let inicioTiempo = null;
+let terminado = false;
+
+// cámara trasera
+navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: "environment" } }
+})
+.then(s => video.srcObject = s);
+
+// detección flexible
+function esVerde(r,g,b){ return g>120 && r<120 && b<120; }
+function esNegro(r,g,b){ return r<70 && g<70 && b<70; }
+function esRojo(r,g,b){ return r>130 && g<100 && b<100; }
+function esBlanco(r,g,b){ return r>180 && g>180 && b>180; }
+
+function escanear() {
+    if (terminado) return;
+
+    ctx.drawImage(video,0,0,canvas.width,canvas.height);
+
+    const y = canvas.height/2|0;
+    const img = ctx.getImageData(0,y,canvas.width,1).data;
+
+    const centro = canvas.width/2|0;
+
+    let start = -1;
+    for (let x=centro; x>=0; x--) {
+        let i=x*4;
+        if (esVerde(img[i],img[i+1],img[i+2])) {
+            start=x;
+            break;
+        }
+    }
+
+    if (start === -1) {
+        requestAnimationFrame(escanear);
+        return;
+    }
+
+    let bits="";
+    let last=null;
+    let leyendo=false;
+
+    for (let x=start; x<canvas.width; x++) {
+        let i=x*4;
+        let r=img[i], g=img[i+1], b=img[i+2];
+
+        let c=null;
+
+        if (esVerde(r,g,b)) {
+            if (leyendo) break;
+        }
+        else if (esNegro(r,g,b)) c="sep";
+        else if (esRojo(r,g,b)) c="1";
+        else if (esBlanco(r,g,b)) c="0";
+
+        if (!c) continue;
+
+        if (c!==last) {
+            if (c==="1"){ bits+="1"; leyendo=true; }
+            if (c==="0"){ bits+="0"; leyendo=true; }
+            last=c;
+        }
+    }
+
+    if (bits.length > 0) {
+        if (!inicioTiempo) inicioTiempo = Date.now();
+
+        historial.push(bits);
+        if (historial.length > 30) historial.shift();
+
+        let tiempo = (Date.now() - inicioTiempo) / 1000;
+
+        if (tiempo >= 3) {
+            let conteo = {};
+            historial.forEach(b => conteo[b]=(conteo[b]||0)+1);
+
+            let mejor = Object.entries(conteo)
+                .sort((a,b)=>b[1]-a[1])[0][0];
+
+            mostrarResultado(mejor);
+            return;
+        }
+    }
+
+    requestAnimationFrame(escanear);
+}
+
+function mostrarResultado(texto) {
+    terminado = true;
+    resultBox.innerText = texto;
+    resultBox.style.display = "block";
+}
+
+video.addEventListener("play", escanear);
+</script>
+
+</body>
+</html>
