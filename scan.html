@@ -20,14 +20,8 @@ video {
     object-fit: cover;
 }
 
-canvas {
-    display: none;
-}
-
 #overlay {
     position: fixed;
-    top: 0;
-    left: 0;
     width: 100%;
     height: 100%;
 }
@@ -45,30 +39,51 @@ canvas {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: rgba(0,0,0,0.85);
+    background: rgba(0,0,0,0.9);
     color: white;
-    padding: 30px 50px;
+    padding: 30px;
     border-radius: 15px;
-    font-size: 32px;
+    text-align: center;
     display: none;
+}
+
+#resultText {
+    font-size: 32px;
+    margin-bottom: 15px;
+}
+
+#retry {
+    padding: 10px 20px;
+    font-size: 18px;
+    border: none;
+    border-radius: 10px;
+    background: lime;
+    cursor: pointer;
 }
 </style>
 </head>
 <body>
 
 <video id="video" autoplay playsinline></video>
-<canvas id="scan" width="640" height="480"></canvas>
+<canvas id="scan" width="640" height="480" style="display:none;"></canvas>
 
 <div id="overlay">
     <div id="line"></div>
-    <div id="resultBox"></div>
+
+    <div id="resultBox">
+        <div id="resultText"></div>
+        <button id="retry">Escanear otra vez</button>
+    </div>
 </div>
 
 <script>
 const video = document.getElementById("video");
 const canvas = document.getElementById("scan");
 const ctx = canvas.getContext("2d");
+
 const resultBox = document.getElementById("resultBox");
+const resultText = document.getElementById("resultText");
+const retryBtn = document.getElementById("retry");
 
 let historial = [];
 let inicioTiempo = null;
@@ -80,7 +95,7 @@ navigator.mediaDevices.getUserMedia({
 })
 .then(s => video.srcObject = s);
 
-// detección flexible
+// detección
 function esVerde(r,g,b){ return g>120 && r<120 && b<120; }
 function esNegro(r,g,b){ return r<70 && g<70 && b<70; }
 function esRojo(r,g,b){ return r>130 && g<100 && b<100; }
@@ -94,7 +109,7 @@ function escanear() {
     const y = canvas.height/2|0;
     const img = ctx.getImageData(0,y,canvas.width,1).data;
 
-    const centro = canvas.width/2|0;
+    let centro = canvas.width/2|0;
 
     let start = -1;
     for (let x=centro; x>=0; x--) {
@@ -142,11 +157,11 @@ function escanear() {
         historial.push(bits);
         if (historial.length > 30) historial.shift();
 
-        let tiempo = (Date.now() - inicioTiempo) / 1000;
+        let tiempo = (Date.now() - inicioTiempo)/1000;
 
         if (tiempo >= 3) {
-            let conteo = {};
-            historial.forEach(b => conteo[b]=(conteo[b]||0)+1);
+            let conteo={};
+            historial.forEach(b=>conteo[b]=(conteo[b]||0)+1);
 
             let mejor = Object.entries(conteo)
                 .sort((a,b)=>b[1]-a[1])[0][0];
@@ -159,11 +174,20 @@ function escanear() {
     requestAnimationFrame(escanear);
 }
 
-function mostrarResultado(texto) {
+function mostrarResultado(txt) {
     terminado = true;
-    resultBox.innerText = texto;
+    resultText.innerText = txt;
     resultBox.style.display = "block";
 }
+
+// 🔁 reset
+retryBtn.onclick = () => {
+    historial = [];
+    inicioTiempo = null;
+    terminado = false;
+    resultBox.style.display = "none";
+    escanear();
+};
 
 video.addEventListener("play", escanear);
 </script>
